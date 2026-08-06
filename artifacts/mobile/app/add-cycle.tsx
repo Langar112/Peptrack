@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  FlatList,
+  Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -27,8 +28,9 @@ const FREQUENCIES = [
   'Weekly',
 ];
 
+const DOSAGE_UNITS = ['mcg', 'mg', 'IU', 'mL', 'mg/mL'];
+
 function parseDate(input: string): Date | null {
-  // Accept YYYY-MM-DD or MM/DD/YYYY
   const isoMatch = input.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (isoMatch) {
     const [, y, m, d] = isoMatch;
@@ -57,7 +59,9 @@ export default function AddCycleScreen() {
   const [peptideName, setPeptideName] = useState('');
   const [startDateStr, setStartDateStr] = useState('');
   const [endDateStr, setEndDateStr] = useState('');
-  const [dosage, setDosage] = useState('');
+  const [dosageAmount, setDosageAmount] = useState('');
+  const [dosageUnit, setDosageUnit] = useState('mcg');
+  const [unitModalVisible, setUnitModalVisible] = useState(false);
   const [frequency, setFrequency] = useState('Daily');
   const [notes, setNotes] = useState('');
 
@@ -75,27 +79,30 @@ export default function AddCycleScreen() {
       return;
     }
 
-    const end = parseDate(endDateStr);
-    if (!end) {
-      Alert.alert('Invalid Date', 'Enter end date as YYYY-MM-DD or MM/DD/YYYY.');
-      return;
+    let endISO: string | undefined;
+    if (endDateStr.trim()) {
+      const end = parseDate(endDateStr);
+      if (!end) {
+        Alert.alert('Invalid Date', 'Enter end date as YYYY-MM-DD or MM/DD/YYYY, or leave it blank for an ongoing cycle.');
+        return;
+      }
+      if (end <= start) {
+        Alert.alert('Invalid Date Range', 'End date must be after start date.');
+        return;
+      }
+      endISO = toISODate(end);
     }
 
-    if (end <= start) {
-      Alert.alert('Invalid Date Range', 'End date must be after start date.');
-      return;
-    }
-
-    if (!dosage.trim()) {
-      Alert.alert('Missing Field', 'Please enter a dosage (e.g. "250 mcg").');
+    if (!dosageAmount.trim()) {
+      Alert.alert('Missing Field', 'Please enter a dosage amount.');
       return;
     }
 
     addCycle({
       peptideName: peptideName.trim(),
       startDate: toISODate(start),
-      endDate: toISODate(end),
-      dosage: dosage.trim(),
+      endDate: endISO,
+      dosage: `${dosageAmount.trim()} ${dosageUnit}`,
       frequency,
       notes: notes.trim(),
     });
@@ -157,7 +164,10 @@ export default function AddCycleScreen() {
             />
           </View>
           <View style={[styles.fieldGroup, { flex: 1 }]}>
-            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>End Date</Text>
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
+              End Date{' '}
+              <Text style={[styles.optional, { color: colors.mutedForeground }]}>(optional)</Text>
+            </Text>
             <TextInput
               style={[styles.textInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
               value={endDateStr}
@@ -173,21 +183,39 @@ export default function AddCycleScreen() {
         <View style={[styles.hintBox, { backgroundColor: colors.muted }]}>
           <Feather name="info" size={13} color={colors.mutedForeground} />
           <Text style={[styles.hintText, { color: colors.mutedForeground }]}>
-            Format: 2025-06-01 or 06/01/2025
+            Format: 2025-06-01 or 06/01/2025. Leave end date blank for an ongoing cycle.
           </Text>
         </View>
 
-        {/* Dosage */}
+        {/* Dosage + Unit */}
         <View style={styles.fieldGroup}>
           <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Dosage</Text>
-          <TextInput
-            style={[styles.textInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
-            value={dosage}
-            onChangeText={setDosage}
-            placeholder="e.g. 250 mcg"
-            placeholderTextColor={colors.mutedForeground}
-            autoCorrect={false}
-          />
+          <View style={styles.dosageRow}>
+            <TextInput
+              style={[
+                styles.textInput,
+                styles.dosageInput,
+                { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
+              ]}
+              value={dosageAmount}
+              onChangeText={setDosageAmount}
+              placeholder="e.g. 250"
+              placeholderTextColor={colors.mutedForeground}
+              keyboardType="decimal-pad"
+              autoCorrect={false}
+            />
+            <TouchableOpacity
+              style={[styles.unitSelector, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => {
+                setUnitModalVisible(true);
+                Haptics.selectionAsync();
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.unitText, { color: colors.foreground }]}>{dosageUnit}</Text>
+              <Feather name="chevron-down" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Frequency */}
@@ -243,13 +271,66 @@ export default function AddCycleScreen() {
         </View>
 
         {/* Save Button */}
-        <TouchableOpacity style={[styles.saveButton, { backgroundColor: colors.primary }]} onPress={handleSave} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[styles.saveButton, { backgroundColor: colors.primary }]}
+          onPress={handleSave}
+          activeOpacity={0.8}
+        >
           <Feather name="check" size={18} color={colors.primaryForeground} />
           <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>Save Cycle</Text>
         </TouchableOpacity>
 
         <View style={{ height: Platform.OS === 'web' ? 80 : 40 }} />
       </ScrollView>
+
+      {/* Unit Picker Modal */}
+      <Modal
+        visible={unitModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setUnitModalVisible(false)}
+      >
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Select Unit</Text>
+            <TouchableOpacity onPress={() => setUnitModalVisible(false)}>
+              <Feather name="x" size={22} color={colors.foreground} />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={DOSAGE_UNITS}
+            keyExtractor={(item) => item}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  styles.unitRow,
+                  { borderBottomColor: colors.border },
+                  dosageUnit === item && { backgroundColor: colors.primary + '18' },
+                ]}
+                onPress={() => {
+                  setDosageUnit(item);
+                  setUnitModalVisible(false);
+                  Haptics.selectionAsync();
+                }}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.unitRowText,
+                    { color: dosageUnit === item ? colors.primary : colors.foreground },
+                    dosageUnit === item && { fontFamily: 'Inter_600SemiBold' },
+                  ]}
+                >
+                  {item}
+                </Text>
+                {dosageUnit === item && (
+                  <Feather name="check" size={18} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -278,6 +359,12 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
       letterSpacing: 0.8,
       marginBottom: 8,
     },
+    optional: {
+      fontSize: 11,
+      fontFamily: 'Inter_400Regular',
+      textTransform: 'none',
+      letterSpacing: 0,
+    },
     textInput: {
       borderRadius: colors.radius,
       borderWidth: 1,
@@ -293,7 +380,7 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
     rowGroup: { flexDirection: 'row', marginBottom: 0 },
     hintBox: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       gap: 6,
       paddingHorizontal: 12,
       paddingVertical: 8,
@@ -301,7 +388,21 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
       marginBottom: 20,
       marginTop: -4,
     },
-    hintText: { fontSize: 12, fontFamily: 'Inter_400Regular' },
+    hintText: { fontSize: 12, fontFamily: 'Inter_400Regular', flex: 1, lineHeight: 17 },
+    // Dosage row
+    dosageRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+    dosageInput: { flex: 1 },
+    unitSelector: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderRadius: colors.radius,
+      borderWidth: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+      minWidth: 90,
+    },
+    unitText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
     frequencyGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -324,5 +425,25 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
       marginTop: 8,
     },
     saveButtonText: { fontSize: 16, fontFamily: 'Inter_700Bold' },
+    // Unit modal
+    modalContainer: { flex: 1, paddingTop: 20 },
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingBottom: 16,
+      borderBottomWidth: 1,
+    },
+    modalTitle: { fontSize: 20, fontFamily: 'Inter_700Bold' },
+    unitRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingVertical: 18,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    unitRowText: { fontSize: 17, fontFamily: 'Inter_400Regular' },
   });
 }

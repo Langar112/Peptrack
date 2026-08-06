@@ -7,7 +7,7 @@ export interface Cycle {
   id: string;
   peptideName: string;
   startDate: string; // ISO date string YYYY-MM-DD
-  endDate: string; // ISO date string YYYY-MM-DD
+  endDate?: string; // ISO date string YYYY-MM-DD — optional (ongoing cycles have no end)
   dosage: string; // e.g. "250 mcg"
   frequency: string; // e.g. "Daily"
   notes: string;
@@ -16,12 +16,13 @@ export interface Cycle {
 
 export type CycleStatus = 'upcoming' | 'active' | 'completed';
 
-export function getCycleStatus(startDate: string, endDate: string): CycleStatus {
+export function getCycleStatus(startDate: string, endDate?: string): CycleStatus {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const start = new Date(startDate + 'T00:00:00');
-  const end = new Date(endDate + 'T23:59:59');
   if (now < start) return 'upcoming';
+  if (!endDate) return 'active'; // ongoing — no end date means always active once started
+  const end = new Date(endDate + 'T23:59:59');
   if (now > end) return 'completed';
   return 'active';
 }
@@ -33,9 +34,12 @@ export interface WeekEntry {
   status: 'completed' | 'current' | 'upcoming';
 }
 
-export function getWeeks(startDate: string, endDate: string): WeekEntry[] {
+export function getWeeks(startDate: string, endDate?: string): WeekEntry[] {
   const start = new Date(startDate + 'T00:00:00');
-  const end = new Date(endDate + 'T23:59:59');
+  // If no end date, show weeks from start through today (current week)
+  const end = endDate
+    ? new Date(endDate + 'T23:59:59')
+    : (() => { const d = new Date(); d.setHours(23, 59, 59, 999); return d; })();
   const today = new Date();
   const weeks: WeekEntry[] = [];
   let current = new Date(start);

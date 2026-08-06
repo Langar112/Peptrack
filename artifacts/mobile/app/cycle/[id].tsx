@@ -13,7 +13,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { getCycleStatus, getWeeks, useJournal, WeekEntry } from '@/contexts/JournalContext';
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return 'Ongoing';
   return new Date(dateStr + 'T00:00:00').toLocaleDateString(undefined, {
     month: 'long',
     day: 'numeric',
@@ -26,7 +27,8 @@ function formatWeekRange(start: Date, end: Date): string {
   return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;
 }
 
-function calcProgress(startDate: string, endDate: string): number {
+function calcProgress(startDate: string, endDate?: string): number {
+  if (!endDate) return -1; // ongoing
   const now = new Date().getTime();
   const start = new Date(startDate + 'T00:00:00').getTime();
   const end = new Date(endDate + 'T23:59:59').getTime();
@@ -220,24 +222,32 @@ export default function CycleDetailScreen() {
           </View>
 
           {/* Progress */}
-          <View style={styles.progressSection}>
+          {progress >= 0 ? (
+            <View style={styles.progressSection}>
+              <View style={styles.progressLabelRow}>
+                <Text style={[styles.progressLabel, { color: colors.mutedForeground }]}>
+                  Progress — {completedWeeks} of {weeks.length} weeks done
+                </Text>
+                <Text style={[styles.progressPct, { color: colors.primary }]}>
+                  {Math.round(progress * 100)}%
+                </Text>
+              </View>
+              <View style={[styles.progressTrack, { backgroundColor: colors.muted }]}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    { width: `${Math.min(progress * 100, 100)}%` as any, backgroundColor: status === 'completed' ? colors.success : colors.primary },
+                  ]}
+                />
+              </View>
+            </View>
+          ) : (
             <View style={styles.progressLabelRow}>
               <Text style={[styles.progressLabel, { color: colors.mutedForeground }]}>
-                Progress — {completedWeeks} of {weeks.length} weeks done
-              </Text>
-              <Text style={[styles.progressPct, { color: colors.primary }]}>
-                {Math.round(progress * 100)}%
+                {completedWeeks} week{completedWeeks !== 1 ? 's' : ''} completed — ongoing
               </Text>
             </View>
-            <View style={[styles.progressTrack, { backgroundColor: colors.muted }]}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${Math.min(progress * 100, 100)}%` as any, backgroundColor: status === 'completed' ? colors.success : colors.primary },
-                ]}
-              />
-            </View>
-          </View>
+          )}
         </View>
 
         {/* Notes */}

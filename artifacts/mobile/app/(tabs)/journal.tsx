@@ -14,16 +14,18 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
-import { Cycle, CycleStatus, getCycleStatus, useJournal } from '@/contexts/JournalContext';
+import { Cycle, CycleStatus, getCycleStatus, getWeeks, useJournal } from '@/contexts/JournalContext';
 
-function formatDateRange(startDate: string, endDate: string): string {
+function formatDateRange(startDate: string, endDate?: string): string {
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
   const start = new Date(startDate + 'T00:00:00').toLocaleDateString(undefined, opts);
+  if (!endDate) return `${start} – Ongoing`;
   const end = new Date(endDate + 'T00:00:00').toLocaleDateString(undefined, { ...opts, year: 'numeric' });
   return `${start} – ${end}`;
 }
 
-function calcProgress(startDate: string, endDate: string): number {
+function calcProgress(startDate: string, endDate?: string): number {
+  if (!endDate) return -1; // signals "ongoing"
   const now = new Date().getTime();
   const start = new Date(startDate + 'T00:00:00').getTime();
   const end = new Date(endDate + 'T23:59:59').getTime();
@@ -32,7 +34,8 @@ function calcProgress(startDate: string, endDate: string): number {
   return (now - start) / (end - start);
 }
 
-function calcTotalWeeks(startDate: string, endDate: string): number {
+function calcTotalWeeks(startDate: string, endDate?: string): number {
+  if (!endDate) return getWeeks(startDate, undefined).length;
   const start = new Date(startDate + 'T00:00:00').getTime();
   const end = new Date(endDate + 'T23:59:59').getTime();
   return Math.ceil((end - start) / (7 * 24 * 60 * 60 * 1000));
@@ -119,7 +122,7 @@ function CycleCard({
         </View>
       </View>
 
-      {status === 'active' && (
+      {status === 'active' && progress >= 0 && (
         <View style={styles.progressSection}>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${Math.min(progress * 100, 100)}%` as any }]} />
