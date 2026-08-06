@@ -66,6 +66,7 @@ export default function CalculatorScreen() {
   const [bacWaterMl, setBacWaterMl] = useState<string>('2');
   const [desiredDoseMcg, setDesiredDoseMcg] = useState<string>('250');
   const [doseUnit, setDoseUnit] = useState<string>('mcg');
+  const [syringeSize, setSyringeSize] = useState<100 | 50>(100);
   const [result, setResult] = useState<Result | null>(null);
   const [peptideModalVisible, setPeptideModalVisible] = useState(false);
   const [unitModalVisible, setUnitModalVisible] = useState(false);
@@ -221,6 +222,35 @@ export default function CalculatorScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* Syringe size toggle */}
+            <View style={[styles.syringeToggle, { backgroundColor: colors.muted }]}>
+              <Text style={[styles.syringeToggleLabel, { color: colors.mutedForeground }]}>Syringe:</Text>
+              {([100, 50] as const).map((size) => (
+                <TouchableOpacity
+                  key={size}
+                  style={[
+                    styles.syringeToggleBtn,
+                    syringeSize === size && { backgroundColor: colors.card },
+                  ]}
+                  onPress={() => {
+                    setSyringeSize(size);
+                    Haptics.selectionAsync();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.syringeToggleBtnText,
+                      { color: syringeSize === size ? colors.foreground : colors.mutedForeground },
+                      syringeSize === size && { fontFamily: 'Inter_600SemiBold' },
+                    ]}
+                  >
+                    {size}u
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <View style={styles.metricsGrid}>
               <View style={[styles.metricBox, { backgroundColor: colors.muted }]}>
                 <Text style={styles.metricValue}>
@@ -240,17 +270,17 @@ export default function CalculatorScreen() {
 
               <View style={[styles.metricBox, { backgroundColor: colors.success + '18' }]}>
                 <Text style={[styles.metricValue, { color: colors.success }]}>
-                  {formatNum(result.syringeUnits, 1)}
+                  {formatNum(result.volumeMl * syringeSize, 1)}
                 </Text>
-                <Text style={[styles.metricLabel, { color: colors.success }]}>units</Text>
-                <Text style={styles.metricDesc}>Insulin syringe</Text>
+                <Text style={[styles.metricLabel, { color: colors.success }]}>{syringeSize}u syringe</Text>
+                <Text style={styles.metricDesc}>Draw to</Text>
               </View>
             </View>
 
             <View style={styles.resultNote}>
               <MaterialCommunityIcons name="needle" size={14} color={colors.mutedForeground} />
               <Text style={styles.resultNoteText}>
-                Draw <Text style={styles.bold}>{formatNum(result.syringeUnits, 1)} units</Text> on a 100-unit insulin syringe for your{' '}
+                Draw to <Text style={styles.bold}>{formatNum(result.volumeMl * syringeSize, 1)} units</Text> on a {syringeSize}-unit insulin syringe for your{' '}
                 <Text style={styles.bold}>{formatNum(result.volumeMl, 3)} mL</Text> dose.
               </Text>
             </View>
@@ -515,7 +545,31 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
+      marginBottom: 12,
+    },
+    syringeToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: colors.radius - 4,
+      padding: 4,
       marginBottom: 16,
+      gap: 4,
+    },
+    syringeToggleLabel: {
+      fontSize: 12,
+      fontFamily: 'Inter_500Medium',
+      marginLeft: 4,
+      marginRight: 4,
+    },
+    syringeToggleBtn: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: 7,
+      borderRadius: colors.radius - 6,
+    },
+    syringeToggleBtnText: {
+      fontSize: 13,
+      fontFamily: 'Inter_500Medium',
     },
     resultTitle: {
       fontSize: 18,
