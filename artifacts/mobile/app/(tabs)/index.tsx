@@ -37,10 +37,21 @@ const PEPTIDES = [
   { name: 'Custom', unit: 'mcg', defaultDose: 0, vialSize: 0 },
 ];
 
+const DOSE_UNITS = ['mcg', 'mg', 'IU', 'mL'];
+
+// Conversion factor to mcg for the internal calculation
+const UNIT_TO_MCG: Record<string, number> = {
+  mcg: 1,
+  mg: 1000,
+  IU: 1,   // IU is substance-specific; passed through as-is
+  mL: 1,   // mL dose passed through as-is
+};
+
 interface Result {
   concentrationMcgPerMl: number;
   volumeMl: number;
   syringeUnits: number;
+  doseUnit: string;
 }
 
 function formatNum(n: number, decimals = 2): string {
@@ -54,8 +65,10 @@ export default function CalculatorScreen() {
   const [vialSizeMg, setVialSizeMg] = useState<string>('5');
   const [bacWaterMl, setBacWaterMl] = useState<string>('2');
   const [desiredDoseMcg, setDesiredDoseMcg] = useState<string>('250');
+  const [doseUnit, setDoseUnit] = useState<string>('mcg');
   const [result, setResult] = useState<Result | null>(null);
   const [peptideModalVisible, setPeptideModalVisible] = useState(false);
+  const [unitModalVisible, setUnitModalVisible] = useState(false);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
@@ -77,12 +90,15 @@ export default function CalculatorScreen() {
       return;
     }
 
+    // Convert dose to mcg equivalent for calculation
+    const doseMcg = dose * (UNIT_TO_MCG[doseUnit] ?? 1);
+
     // vialSizeMg is in mg → convert to mcg for concentration
     const concentrationMcgPerMl = (vial * 1000) / water;
-    const volumeMl = dose / concentrationMcgPerMl;
+    const volumeMl = doseMcg / concentrationMcgPerMl;
     const syringeUnits = volumeMl * 100;
 
-    setResult({ concentrationMcgPerMl, volumeMl, syringeUnits });
+    setResult({ concentrationMcgPerMl, volumeMl, syringeUnits, doseUnit });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
@@ -167,7 +183,17 @@ export default function CalculatorScreen() {
               placeholderTextColor={colors.mutedForeground}
               keyboardType="decimal-pad"
             />
-            <Text style={styles.inputUnit}>mcg</Text>
+            <TouchableOpacity
+              style={styles.unitButton}
+              onPress={() => {
+                setUnitModalVisible(true);
+                Haptics.selectionAsync();
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.unitButtonText}>{doseUnit}</Text>
+              <Feather name="chevron-down" size={13} color={colors.mutedForeground} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -233,6 +259,55 @@ export default function CalculatorScreen() {
 
         <View style={{ height: Platform.OS === 'web' ? 120 : 100 }} />
       </ScrollView>
+
+      {/* Dose Unit Picker Modal */}
+      <Modal
+        visible={unitModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setUnitModalVisible(false)}
+      >
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Dose Unit</Text>
+            <TouchableOpacity onPress={() => setUnitModalVisible(false)}>
+              <Feather name="x" size={22} color={colors.foreground} />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={DOSE_UNITS}
+            keyExtractor={(item) => item}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  styles.peptideRow,
+                  doseUnit === item && { backgroundColor: colors.primary + '18' },
+                ]}
+                onPress={() => {
+                  setDoseUnit(item);
+                  setResult(null);
+                  setUnitModalVisible(false);
+                  Haptics.selectionAsync();
+                }}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.peptideName,
+                    doseUnit === item && { color: colors.primary, fontFamily: 'Inter_600SemiBold' },
+                  ]}
+                >
+                  {item}
+                </Text>
+                {doseUnit === item && (
+                  <Feather name="check" size={18} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            )}
+            contentContainerStyle={{ paddingBottom: 40 }}
+          />
+        </View>
+      </Modal>
 
       {/* Peptide Picker Modal */}
       <Modal
@@ -380,6 +455,22 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
       fontFamily: 'Inter_400Regular',
       color: colors.mutedForeground,
       marginLeft: 8,
+    },
+    unitButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingLeft: 10,
+      paddingRight: 2,
+      paddingVertical: 4,
+      borderLeftWidth: StyleSheet.hairlineWidth,
+      borderLeftColor: colors.border,
+      marginLeft: 4,
+    },
+    unitButtonText: {
+      fontSize: 15,
+      fontFamily: 'Inter_600SemiBold',
+      color: colors.primary,
     },
     infoCard: {
       flexDirection: 'row',
