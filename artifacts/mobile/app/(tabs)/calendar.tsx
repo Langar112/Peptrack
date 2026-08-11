@@ -110,28 +110,34 @@ export default function CalendarScreen() {
   const [deletingCycleId, setDeletingCycleId] = useState<string | null>(null);
 
   const handleDeleteCycle = (id: string, name: string) => {
-    Alert.alert(
-      'Delete Cycle',
-      `Permanently delete "${name}" and all its injection records? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive',
-          onPress: async () => {
-            setDeletingCycleId(id);
-            try {
-              await api.cycles.delete(id);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              fetchData();
-            } catch {
-              Alert.alert('Error', 'Failed to delete cycle. Please try again.');
-            } finally {
-              setDeletingCycleId(null);
-            }
-          },
-        },
-      ]
-    );
+    const doDelete = async () => {
+      setDeletingCycleId(id);
+      try {
+        await api.cycles.delete(id);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        fetchData();
+      } catch {
+        Alert.alert('Error', 'Failed to delete cycle. Please try again.');
+      } finally {
+        setDeletingCycleId(null);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      // window.confirm works reliably on web; Alert.alert does not
+      if ((globalThis as any).confirm(`Delete "${name}" and all its injection records? This cannot be undone.`)) {
+        doDelete();
+      }
+    } else {
+      Alert.alert(
+        'Delete Cycle',
+        `Permanently delete "${name}" and all its injection records? This cannot be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: doDelete },
+        ]
+      );
+    }
   };
 
   const fetchData = useCallback(async () => {
