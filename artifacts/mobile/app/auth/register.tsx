@@ -144,13 +144,6 @@ export default function RegisterScreen() {
           )}
         </TouchableOpacity>
 
-        <View style={s.switchRow}>
-          <Text style={s.switchText}>Already have an account?</Text>
-          <TouchableOpacity onPress={() => router.replace('/auth/login')}>
-            <Text style={s.switchLink}> Sign in</Text>
-          </TouchableOpacity>
-        </View>
-
         <View style={s.disclaimer}>
           <Text style={s.disclaimerText}>
             For informational tracking and mathematical calculation only. This app does not provide medical advice, recommend dosages, diagnose conditions, or replace a licensed healthcare professional. Always verify calculations before use.

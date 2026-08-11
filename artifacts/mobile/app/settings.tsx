@@ -111,13 +111,6 @@ export default function SettingsScreen() {
           <View style={s.section}>
             <Text style={s.sectionTitle}>Account</Text>
             <View style={s.card}>
-              <TouchableOpacity style={s.cardRow} onPress={() => router.push('/auth/login')}>
-                <View style={s.rowLeft}>
-                  <Feather name="log-in" size={18} color={colors.primary} />
-                  <Text style={[s.rowLabel, { color: colors.primary }]}>Sign In</Text>
-                </View>
-                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-              </TouchableOpacity>
               <TouchableOpacity style={s.cardRow} onPress={() => router.push('/auth/register')}>
                 <View style={s.rowLeft}>
                   <Feather name="user-plus" size={18} color={colors.primary} />

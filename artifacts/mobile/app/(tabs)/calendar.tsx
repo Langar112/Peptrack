@@ -185,13 +185,10 @@ export default function CalendarScreen() {
         <Feather name="calendar" size={48} color={colors.border} />
         <Text style={[s.headerTitle, { marginTop: 16, marginBottom: 8, textAlign: 'center' }]}>Calendar</Text>
         <Text style={[s.subtitle, { textAlign: 'center', paddingHorizontal: 40, marginBottom: 24 }]}>
-          Sign in to schedule injection cycles and view your calendar.
+          Create an account to schedule injection cycles and view your calendar.
         </Text>
-        <TouchableOpacity style={s.primaryBtn} onPress={() => router.push('/auth/login')} activeOpacity={0.8}>
-          <Text style={s.primaryBtnText}>Sign In</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.secondaryBtn} onPress={() => router.push('/auth/register')} activeOpacity={0.8}>
-          <Text style={s.secondaryBtnText}>Create Account</Text>
+        <TouchableOpacity style={s.primaryBtn} onPress={() => router.push('/auth/register')} activeOpacity={0.8}>
+          <Text style={s.primaryBtnText}>Create Account</Text>
         </TouchableOpacity>
       </View>
     );

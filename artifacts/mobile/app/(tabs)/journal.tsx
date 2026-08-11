@@ -148,10 +148,10 @@ export default function JournalScreen() {
         <Feather name="book-open" size={48} color={colors.border} />
         <Text style={[s.headerTitle, { marginTop: 16, marginBottom: 8, textAlign: 'center' }]}>Journal</Text>
         <Text style={[s.subtitle, { textAlign: 'center', paddingHorizontal: 40, marginBottom: 24 }]}>
-          Sign in to record observations, dose changes, and notes.
+          Create an account to record observations, dose changes, and notes.
         </Text>
-        <TouchableOpacity style={s.primaryBtn} onPress={() => router.push('/auth/login')} activeOpacity={0.8}>
-          <Text style={s.primaryBtnText}>Sign In</Text>
+        <TouchableOpacity style={s.primaryBtn} onPress={() => router.push('/auth/register')} activeOpacity={0.8}>
+          <Text style={s.primaryBtnText}>Create Account</Text>
         </TouchableOpacity>
       </View>
     );

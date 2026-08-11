@@ -225,7 +225,7 @@ export default function CalculatorScreen() {
   const handleStartCycle = () => {
     if (!result) return;
     if (!isAuthenticated) {
-      router.push('/auth/login');
+      router.push('/auth/register');
       return;
     }
     router.push({
