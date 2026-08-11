@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -8,371 +10,241 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
-import { getCycleStatus, getWeeks, useJournal, WeekEntry } from '@/contexts/JournalContext';
+import { api, type CycleWithRule } from '@/services/api';
 
-function formatDate(dateStr?: string): string {
+function formatDate(dateStr?: string | null): string {
   if (!dateStr) return 'Ongoing';
   return new Date(dateStr + 'T00:00:00').toLocaleDateString(undefined, {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
+    month: 'long', day: 'numeric', year: 'numeric',
   });
 }
 
-function formatWeekRange(start: Date, end: Date): string {
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-  return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;
+function weekOfCycle(startDate: string): number {
+  const start = new Date(startDate + 'T00:00:00');
+  const now = new Date();
+  const diff = now.getTime() - start.getTime();
+  return Math.max(1, Math.floor(diff / (7 * 24 * 60 * 60 * 1000)) + 1);
 }
 
-function calcProgress(startDate: string, endDate?: string): number {
-  if (!endDate) return -1; // ongoing
-  const now = new Date().getTime();
-  const start = new Date(startDate + 'T00:00:00').getTime();
-  const end = new Date(endDate + 'T23:59:59').getTime();
-  if (now <= start) return 0;
-  if (now >= end) return 1;
-  return (now - start) / (end - start);
+function statusColor(status: string, colors: any) {
+  if (status === 'active') return colors.success;
+  if (status === 'paused') return colors.warning;
+  if (status === 'archived') return colors.mutedForeground;
+  return colors.mutedForeground;
 }
 
-function WeekRow({ week, colors }: { week: WeekEntry; colors: ReturnType<typeof useColors> }) {
-  const isCurrent = week.status === 'current';
-  const isCompleted = week.status === 'completed';
-
-  return (
-    <View style={[
-      weekRowStyles.row,
-      isCurrent && { backgroundColor: colors.primary + '12', borderColor: colors.primary + '40' },
-      !isCurrent && { borderColor: colors.border },
-    ]}>
-      {/* Timeline dot + line */}
-      <View style={weekRowStyles.timeline}>
-        <View style={[
-          weekRowStyles.dot,
-          isCurrent && { backgroundColor: colors.primary, borderColor: colors.primary },
-          isCompleted && { backgroundColor: colors.success, borderColor: colors.success },
-          week.status === 'upcoming' && { backgroundColor: colors.card, borderColor: colors.border },
-        ]} />
-      </View>
-
-      {/* Content */}
-      <View style={weekRowStyles.content}>
-        <View style={weekRowStyles.topRow}>
-          <Text style={[
-            weekRowStyles.weekNum,
-            { color: isCurrent ? colors.primary : colors.foreground },
-          ]}>
-            Week {week.weekNumber}
-          </Text>
-          {isCurrent && (
-            <View style={[weekRowStyles.currentBadge, { backgroundColor: colors.primary }]}>
-              <Text style={[weekRowStyles.currentBadgeText, { color: colors.primaryForeground }]}>
-                Current
-              </Text>
-            </View>
-          )}
-          {isCompleted && (
-            <Feather name="check-circle" size={16} color={colors.success} />
-          )}
-        </View>
-        <Text style={[weekRowStyles.dateRange, { color: colors.mutedForeground }]}>
-          {formatWeekRange(week.startDate, week.endDate)}
-        </Text>
-      </View>
-    </View>
-  );
+function freqLabel(cycle: CycleWithRule): string {
+  const rule = cycle.scheduleRule;
+  if (!rule) return '—';
+  if (rule.frequencyType === 'daily') return 'Every day';
+  if (rule.frequencyType === 'specific_days') return (rule.daysOfWeek ?? []).join(', ');
+  if (rule.frequencyType === 'times_per_week') return `${rule.injectionsPerWeek}x per week`;
+  if (rule.frequencyType === 'every_x_days') return `Every ${rule.intervalDays} days`;
+  return rule.frequencyType;
 }
-
-const weekRowStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-  },
-  timeline: {
-    width: 28,
-    alignItems: 'center',
-  },
-  dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-  },
-  content: { flex: 1, marginLeft: 8 },
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  weekNum: {
-    fontSize: 15,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  currentBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  currentBadgeText: {
-    fontSize: 11,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  dateRange: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    marginTop: 2,
-  },
-});
 
 export default function CycleDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getCycleById } = useJournal();
+  const topPad = Platform.OS === 'web' ? 20 : insets.top;
 
-  const cycle = getCycleById(id ?? '');
+  const [cycle, setCycle] = useState<CycleWithRule | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isActing, setIsActing] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    api.cycles.get(id)
+      .then(({ cycle }) => setCycle(cycle))
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, [id]);
+
+  const handleAction = (action: 'pause' | 'resume' | 'archive' | 'delete') => {
+    const labels = {
+      pause: { title: 'Pause Cycle', msg: 'Pause this cycle? You can resume it later.', btn: 'Pause', danger: false },
+      resume: { title: 'Resume Cycle', msg: 'Resume this cycle?', btn: 'Resume', danger: false },
+      archive: { title: 'Archive Cycle', msg: 'Archive this cycle? Historical records will be preserved.', btn: 'Archive', danger: false },
+      delete: { title: 'Delete Cycle', msg: 'Permanently delete this cycle and all its injection records? This cannot be undone.', btn: 'Delete', danger: true },
+    }[action];
+
+    Alert.alert(labels.title, labels.msg, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: labels.btn, style: labels.danger ? 'destructive' : 'default',
+        onPress: async () => {
+          setIsActing(true);
+          try {
+            if (action === 'pause') await api.cycles.pause(id!);
+            else if (action === 'resume') await api.cycles.resume(id!);
+            else if (action === 'archive') await api.cycles.archive(id!);
+            else await api.cycles.delete(id!);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            if (action === 'delete' || action === 'archive') {
+              router.back();
+            } else {
+              const { cycle } = await api.cycles.get(id!);
+              setCycle(cycle);
+            }
+          } catch {
+            Alert.alert('Error', `Failed to ${action} cycle.`);
+          } finally { setIsActing(false); }
+        }
+      }
+    ]);
+  };
+
+  const s = makeStyles(colors);
+
+  if (isLoading) {
+    return (
+      <View style={[s.container, { paddingTop: topPad, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
 
   if (!cycle) {
     return (
-      <View style={[styles.notFound, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-        <Feather name="alert-circle" size={40} color={colors.border} />
-        <Text style={[styles.notFoundText, { color: colors.mutedForeground }]}>Cycle not found</Text>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>Go back</Text>
+      <View style={[s.container, { paddingTop: topPad, alignItems: 'center', justifyContent: 'center' }]}>
+        <Feather name="alert-circle" size={48} color={colors.border} />
+        <Text style={[s.name, { marginTop: 16, textAlign: 'center' }]}>Cycle not found</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
+          <Text style={{ color: colors.primary, fontFamily: 'Inter_500Medium' }}>Go back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const weeks = getWeeks(cycle.startDate, cycle.endDate);
-  const status = getCycleStatus(cycle.startDate, cycle.endDate);
-  const progress = calcProgress(cycle.startDate, cycle.endDate);
-  const completedWeeks = weeks.filter((w) => w.status === 'completed').length;
-
-  const statusConfig = {
-    active: { label: 'Active', color: colors.success },
-    upcoming: { label: 'Upcoming', color: colors.warning },
-    completed: { label: 'Completed', color: colors.mutedForeground },
-  }[status];
-
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  const name = cycle.cycleName || cycle.customCompoundName || 'Cycle';
+  const currentWeek = cycle.status === 'active' ? weekOfCycle(cycle.startDate) : null;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Custom Header */}
-      <View style={[styles.navBar, { paddingTop: topPad, borderBottomColor: colors.border }]}>
+    <View style={[s.container, { paddingTop: topPad }]}>
+      {/* Header */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Feather name="chevron-left" size={26} color={colors.foreground} />
+        </TouchableOpacity>
+        <Text style={s.headerTitle} numberOfLines={1}>{name}</Text>
         <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backBtn}
+          onPress={() => router.push({ pathname: '/add-cycle', params: { editId: cycle.id } })}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Feather name="arrow-left" size={22} color={colors.foreground} />
+          <Feather name="edit-2" size={20} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={[styles.navTitle, { color: colors.foreground }]} numberOfLines={1}>
-          {cycle.peptideName}
-        </Text>
-        <View style={{ width: 38 }} />
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Hero card */}
-        <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.heroTop}>
-            <Text style={[styles.heroName, { color: colors.foreground }]}>{cycle.peptideName}</Text>
-            <View style={[styles.statusDot, { backgroundColor: statusConfig.color + '20' }]}>
-              <View style={[styles.statusDotInner, { backgroundColor: statusConfig.color }]} />
-              <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
-            </View>
-          </View>
-
-          <View style={styles.heroMeta}>
-            <View style={styles.metaItem}>
-              <Feather name="calendar" size={14} color={colors.mutedForeground} />
-              <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>Start</Text>
-              <Text style={[styles.metaValue, { color: colors.foreground }]}>{formatDate(cycle.startDate)}</Text>
-            </View>
-            <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.metaItem}>
-              <Feather name="calendar" size={14} color={colors.mutedForeground} />
-              <Text style={[styles.metaLabel, { color: colors.mutedForeground }]}>End</Text>
-              <Text style={[styles.metaValue, { color: colors.foreground }]}>{formatDate(cycle.endDate)}</Text>
-            </View>
-          </View>
-
-          <View style={[styles.pillsRow]}>
-            <View style={[styles.pill, { backgroundColor: colors.muted }]}>
-              <MaterialCommunityIcons name="needle" size={13} color={colors.mutedForeground} />
-              <Text style={[styles.pillText, { color: colors.mutedForeground }]}>{cycle.dosage}</Text>
-            </View>
-            <View style={[styles.pill, { backgroundColor: colors.muted }]}>
-              <Feather name="clock" size={13} color={colors.mutedForeground} />
-              <Text style={[styles.pillText, { color: colors.mutedForeground }]}>{cycle.frequency}</Text>
-            </View>
-            <View style={[styles.pill, { backgroundColor: colors.muted }]}>
-              <Feather name="layers" size={13} color={colors.mutedForeground} />
-              <Text style={[styles.pillText, { color: colors.mutedForeground }]}>{weeks.length} weeks</Text>
-            </View>
-          </View>
-
-          {/* Progress */}
-          {progress >= 0 ? (
-            <View style={styles.progressSection}>
-              <View style={styles.progressLabelRow}>
-                <Text style={[styles.progressLabel, { color: colors.mutedForeground }]}>
-                  Progress — {completedWeeks} of {weeks.length} weeks done
-                </Text>
-                <Text style={[styles.progressPct, { color: colors.primary }]}>
-                  {Math.round(progress * 100)}%
-                </Text>
-              </View>
-              <View style={[styles.progressTrack, { backgroundColor: colors.muted }]}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${Math.min(progress * 100, 100)}%` as any, backgroundColor: status === 'completed' ? colors.success : colors.primary },
-                  ]}
-                />
-              </View>
-            </View>
-          ) : (
-            <View style={styles.progressLabelRow}>
-              <Text style={[styles.progressLabel, { color: colors.mutedForeground }]}>
-                {completedWeeks} week{completedWeeks !== 1 ? 's' : ''} completed — ongoing
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
+        {/* Hero */}
+        <View style={s.hero}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <View style={[s.statusBadge, { backgroundColor: statusColor(cycle.status, colors) + '20' }]}>
+              <View style={[s.statusDot, { backgroundColor: statusColor(cycle.status, colors) }]} />
+              <Text style={[s.statusText, { color: statusColor(cycle.status, colors) }]}>
+                {cycle.status.charAt(0).toUpperCase() + cycle.status.slice(1)}
               </Text>
             </View>
-          )}
+            {currentWeek && (
+              <View style={[s.statusBadge, { backgroundColor: colors.primary + '18' }]}>
+                <Text style={[s.statusText, { color: colors.primary }]}>Week {currentWeek}{cycle.durationWeeks ? ` of ${cycle.durationWeeks}` : ''}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={s.dose}>{cycle.desiredDose} {cycle.doseUnit}</Text>
+          <Text style={s.doseLabel}>per injection · {parseFloat(cycle.calculatedSyringeUnits).toFixed(1)} units</Text>
         </View>
 
-        {/* Notes */}
-        {cycle.notes ? (
-          <View style={[styles.notesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.notesHeader}>
-              <Feather name="file-text" size={15} color={colors.mutedForeground} />
-              <Text style={[styles.notesTitle, { color: colors.mutedForeground }]}>Notes</Text>
-            </View>
-            <Text style={[styles.notesText, { color: colors.foreground }]}>{cycle.notes}</Text>
+        {/* Info Grid */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Cycle Details</Text>
+          <View style={s.card}>
+            <InfoRow label="Start Date" value={formatDate(cycle.startDate)} colors={colors} />
+            <InfoRow label="End Date" value={formatDate(cycle.endDate)} colors={colors} />
+            <InfoRow label="Duration" value={cycle.ongoing ? 'Ongoing' : cycle.durationWeeks ? `${cycle.durationWeeks} weeks` : '—'} colors={colors} />
+            <InfoRow label="Schedule" value={freqLabel(cycle)} colors={colors} last />
           </View>
-        ) : null}
+        </View>
 
-        {/* Week Timeline */}
-        <Text style={[styles.timelineTitle, { color: colors.foreground }]}>Week Timeline</Text>
-        {weeks.map((week) => (
-          <WeekRow key={week.weekNumber} week={week} colors={colors} />
-        ))}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Vial Information</Text>
+          <View style={s.card}>
+            <InfoRow label="Vial Strength" value={`${cycle.vialAmount} ${cycle.vialUnit}`} colors={colors} />
+            <InfoRow label="BAC Water" value={`${cycle.bacWaterMl} mL`} colors={colors} />
+            <InfoRow label="Volume" value={`${parseFloat(cycle.calculatedVolumeMl).toFixed(3)} mL`} colors={colors} />
+            <InfoRow label="Syringe" value={`${parseFloat(cycle.syringeCapacityMl) === 0.5 ? '0.5' : '1.0'} mL U-100`} colors={colors} last />
+          </View>
+        </View>
 
-        <View style={{ height: Platform.OS === 'web' ? 120 : 40 }} />
+        {/* Actions */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Actions</Text>
+          <View style={s.card}>
+            {cycle.status === 'active' && (
+              <ActionRow icon="pause-circle" label="Pause Cycle" onPress={() => handleAction('pause')} colors={colors} />
+            )}
+            {cycle.status === 'paused' && (
+              <ActionRow icon="play-circle" label="Resume Cycle" onPress={() => handleAction('resume')} colors={colors} />
+            )}
+            {cycle.status !== 'archived' && (
+              <ActionRow icon="archive" label="Archive Cycle" onPress={() => handleAction('archive')} colors={colors} />
+            )}
+            <ActionRow icon="trash-2" label="Delete Cycle" onPress={() => handleAction('delete')} colors={colors} danger last />
+          </View>
+        </View>
+
+        {isActing && (
+          <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )}
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 17,
-    fontFamily: 'Inter_600SemiBold',
-    letterSpacing: -0.3,
-  },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 20 },
-  heroCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 20,
-    marginBottom: 16,
-  },
-  heroTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  heroName: {
-    fontSize: 22,
-    fontFamily: 'Inter_700Bold',
-    letterSpacing: -0.5,
-    flex: 1,
-    marginRight: 12,
-  },
-  statusDot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    gap: 5,
-  },
-  statusDotInner: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
-  heroMeta: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  metaItem: { flex: 1, gap: 3 },
-  metaDivider: { width: 1, marginHorizontal: 12, height: '100%' },
-  metaLabel: { fontSize: 11, fontFamily: 'Inter_500Medium', textTransform: 'uppercase', letterSpacing: 0.5 },
-  metaValue: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
-  pillsRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    gap: 5,
-  },
-  pillText: { fontSize: 13, fontFamily: 'Inter_500Medium' },
-  progressSection: {},
-  progressLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  progressLabel: { fontSize: 12, fontFamily: 'Inter_400Regular' },
-  progressPct: { fontSize: 12, fontFamily: 'Inter_700Bold' },
-  progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 3 },
-  notesCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 20,
-  },
-  notesHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  notesTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textTransform: 'uppercase', letterSpacing: 0.5 },
-  notesText: { fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 21 },
-  timelineTitle: {
-    fontSize: 17,
-    fontFamily: 'Inter_700Bold',
-    marginBottom: 14,
-    letterSpacing: -0.3,
-  },
-  notFound: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  notFoundText: {
-    fontSize: 16,
-    fontFamily: 'Inter_400Regular',
-  },
-});
+function InfoRow({ label, value, colors, last }: { label: string; value: string; colors: any; last?: boolean }) {
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth, borderBottomColor: colors.border }}>
+      <Text style={{ fontSize: 14, fontFamily: 'Inter_400Regular', color: colors.mutedForeground }}>{label}</Text>
+      <Text style={{ fontSize: 14, fontFamily: 'Inter_600SemiBold', color: colors.foreground, maxWidth: '55%', textAlign: 'right' }}>{value}</Text>
+    </View>
+  );
+}
+
+function ActionRow({ icon, label, onPress, colors, danger = false, last = false }: any) {
+  return (
+    <TouchableOpacity
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth, borderBottomColor: colors.border }}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Feather name={icon} size={18} color={danger ? colors.destructive : colors.foreground} />
+      <Text style={{ fontSize: 15, fontFamily: 'Inter_400Regular', color: danger ? colors.destructive : colors.foreground }}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function makeStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
+    headerTitle: { fontSize: 17, fontFamily: 'Inter_700Bold', color: colors.foreground, flex: 1, textAlign: 'center', marginHorizontal: 12 },
+    hero: { padding: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
+    statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+    statusDot: { width: 6, height: 6, borderRadius: 3 },
+    statusText: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
+    dose: { fontSize: 40, fontFamily: 'Inter_700Bold', color: colors.foreground, letterSpacing: -1, marginTop: 8 },
+    doseLabel: { fontSize: 14, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 4 },
+    section: { paddingHorizontal: 20, marginTop: 24 },
+    sectionTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
+    card: { backgroundColor: colors.card, borderRadius: colors.radius, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+    name: { fontSize: 22, fontFamily: 'Inter_700Bold', color: colors.foreground, letterSpacing: -0.3 },
+  });
+}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Alert,
   FlatList,
@@ -14,324 +14,478 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
+import { useAuth } from '@/contexts/AuthContext';
 
+// ─── Catalog ────────────────────────────────────────────────────────────────
 const PEPTIDES = [
-  { name: 'BPC-157', unit: 'mcg', defaultDose: 250, vialSize: 5 },
-  { name: 'TB-500', unit: 'mcg', defaultDose: 2000, vialSize: 5 },
-  { name: 'CJC-1295', unit: 'mcg', defaultDose: 200, vialSize: 2 },
-  { name: 'Ipamorelin', unit: 'mcg', defaultDose: 200, vialSize: 2 },
-  { name: 'Sermorelin', unit: 'mcg', defaultDose: 300, vialSize: 3 },
-  { name: 'PT-141', unit: 'mcg', defaultDose: 1000, vialSize: 10 },
-  { name: 'AOD-9604', unit: 'mcg', defaultDose: 300, vialSize: 5 },
-  { name: 'HGH Frag 176-191', unit: 'mcg', defaultDose: 500, vialSize: 5 },
-  { name: 'Semaglutide', unit: 'mcg', defaultDose: 250, vialSize: 3 },
-  { name: 'Tirzepatide', unit: 'mcg', defaultDose: 2500, vialSize: 15 },
-  { name: 'Selank', unit: 'mcg', defaultDose: 250, vialSize: 5 },
-  { name: 'Semax', unit: 'mcg', defaultDose: 100, vialSize: 3 },
-  { name: 'GHK-Cu', unit: 'mcg', defaultDose: 1000, vialSize: 5 },
-  { name: 'Epithalon', unit: 'mcg', defaultDose: 10000, vialSize: 10 },
-  { name: 'DSIP', unit: 'mcg', defaultDose: 300, vialSize: 2 },
-  { name: 'Thymosin Alpha-1', unit: 'mcg', defaultDose: 1600, vialSize: 5 },
-  { name: 'Custom', unit: 'mcg', defaultDose: 0, vialSize: 0 },
+  'BPC-157', 'TB-500', 'CJC-1295 without DAC', 'CJC-1295 with DAC',
+  'Ipamorelin', 'Sermorelin', 'Tesamorelin', 'GHK-Cu', 'PT-141',
+  'Kisspeptin', 'AOD-9604', 'MOTS-c', 'Epitalon', 'Semaglutide',
+  'Tirzepatide', 'Retatrutide', 'Custom',
 ];
 
-const DOSE_UNITS = ['mcg', 'mg', 'IU', 'mL'];
+const VIAL_UNITS = ['mg', 'mcg', 'IU'];
+const DOSE_UNITS = ['mcg', 'mg', 'IU'];
 
-// Conversion factor to mcg for the internal calculation
-const UNIT_TO_MCG: Record<string, number> = {
-  mcg: 1,
-  mg: 1000,
-  IU: 1,   // IU is substance-specific; passed through as-is
-  mL: 1,   // mL dose passed through as-is
-};
-
-interface Result {
-  concentrationMcgPerMl: number;
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface CalcResult {
+  syringeUnits: number;   // units on selected syringe
   volumeMl: number;
-  syringeUnits: number;
-  doseUnit: string;
+  concentration: number;
+  concentrationUnit: string;
+  amountPerUnit: number;
+  dosesPerVial: number;
+  warnings: string[];
 }
 
-function formatNum(n: number, decimals = 2): string {
-  return n.toFixed(decimals).replace(/\.?0+$/, '');
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function fmt(n: number, dec = 2): string {
+  const s = n.toFixed(dec);
+  return s.replace(/\.?0+$/, '');
 }
 
+function toMcg(amount: number, unit: string): number | null {
+  if (unit === 'mcg') return amount;
+  if (unit === 'mg') return amount * 1000;
+  return null; // IU cannot be converted
+}
+
+// ─── Syringe Diagram ─────────────────────────────────────────────────────────
+function SyringeDiagram({ units, max, colors }: { units: number; max: 50 | 100; colors: any }) {
+  const pct = Math.min(Math.max(units / max, 0), 1);
+  const ticks = max === 100 ? [0, 20, 40, 60, 80, 100] : [0, 10, 20, 30, 40, 50];
+  return (
+    <View style={{ marginTop: 16, marginBottom: 4 }}>
+      <View style={{
+        flexDirection: 'row', alignItems: 'center',
+        height: 36, backgroundColor: colors.card,
+        borderRadius: 18, borderWidth: 1.5, borderColor: colors.border,
+        overflow: 'hidden', position: 'relative',
+      }}>
+        {/* Fill */}
+        <View style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: `${pct * 100}%`,
+          backgroundColor: colors.primary + '30',
+          borderRightWidth: 2,
+          borderRightColor: colors.primary,
+        }} />
+        {/* Plunger marker */}
+        <View style={{
+          position: 'absolute',
+          left: `${pct * 100}%` as any,
+          top: 4, bottom: 4, width: 3,
+          backgroundColor: colors.primary,
+          borderRadius: 2,
+          marginLeft: -1,
+        }} />
+        {/* Tick labels */}
+        {ticks.map((t) => (
+          <View key={t} style={{
+            position: 'absolute',
+            left: `${(t / max) * 100}%` as any,
+            top: 0, bottom: 0,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <View style={{ width: 1, height: 10, backgroundColor: colors.border }} />
+          </View>
+        ))}
+      </View>
+      {/* Labels row */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+        {ticks.map((t) => (
+          <Text key={t} style={{ fontSize: 10, fontFamily: 'Inter_400Regular', color: colors.mutedForeground }}>
+            {t}
+          </Text>
+        ))}
+      </View>
+      <Text style={{ fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, textAlign: 'center', marginTop: 2 }}>
+        units (0–{max})
+      </Text>
+    </View>
+  );
+}
+
+// ─── Screen ──────────────────────────────────────────────────────────────────
 export default function CalculatorScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const [selectedPeptide, setSelectedPeptide] = useState<string>('BPC-157');
-  const [vialSizeMg, setVialSizeMg] = useState<string>('5');
-  const [bacWaterMl, setBacWaterMl] = useState<string>('2');
-  const [desiredDoseMcg, setDesiredDoseMcg] = useState<string>('250');
-  const [doseUnit, setDoseUnit] = useState<string>('mcg');
-  const [syringeSize, setSyringeSize] = useState<100 | 50>(100);
-  const [result, setResult] = useState<Result | null>(null);
-  const [peptideModalVisible, setPeptideModalVisible] = useState(false);
-  const [unitModalVisible, setUnitModalVisible] = useState(false);
-
+  const router = useRouter();
+  const { isAuthenticated } = useAuth();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
-  const calculate = () => {
-    const vial = parseFloat(vialSizeMg);
-    const water = parseFloat(bacWaterMl);
-    const dose = parseFloat(desiredDoseMcg);
+  // Form state
+  const [peptide, setPeptide] = useState('BPC-157');
+  const [customName, setCustomName] = useState('');
+  const [vialAmount, setVialAmount] = useState('');
+  const [vialUnit, setVialUnit] = useState<'mg' | 'mcg' | 'IU'>('mg');
+  const [bacWater, setBacWater] = useState('');
+  const [desiredDose, setDesiredDose] = useState('');
+  const [doseUnit, setDoseUnit] = useState<'mcg' | 'mg' | 'IU'>('mcg');
+  const [syringeSize, setSyringeSize] = useState<50 | 100>(100);
 
-    if (isNaN(vial) || vial <= 0) {
-      Alert.alert('Invalid Input', 'Please enter a valid vial size.');
-      return;
-    }
-    if (isNaN(water) || water <= 0) {
-      Alert.alert('Invalid Input', 'Please enter a valid BAC water amount.');
-      return;
-    }
-    if (isNaN(dose) || dose <= 0) {
-      Alert.alert('Invalid Input', 'Please enter a valid desired dose.');
-      return;
-    }
+  // Modal state
+  const [peptideModal, setPeptideModal] = useState(false);
+  const [peptideSearch, setPeptideSearch] = useState('');
+  const [vialUnitModal, setVialUnitModal] = useState(false);
+  const [doseUnitModal, setDoseUnitModal] = useState(false);
 
-    // Convert dose to mcg equivalent for calculation
-    const doseMcg = dose * (UNIT_TO_MCG[doseUnit] ?? 1);
+  // Result state
+  const [result, setResult] = useState<CalcResult | null>(null);
+  const [error, setError] = useState('');
 
-    // vialSizeMg is in mg → convert to mcg for concentration
-    const concentrationMcgPerMl = (vial * 1000) / water;
-    const volumeMl = doseMcg / concentrationMcgPerMl;
-    const syringeUnits = volumeMl * 100;
-
-    setResult({ concentrationMcgPerMl, volumeMl, syringeUnits, doseUnit });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  };
-
-  const reset = () => {
+  const calculate = useCallback(() => {
+    setError('');
     setResult(null);
-    setVialSizeMg('');
-    setBacWaterMl('');
-    setDesiredDoseMcg('');
-    setSelectedPeptide('BPC-157');
+
+    const vial = parseFloat(vialAmount);
+    const water = parseFloat(bacWater);
+    const dose = parseFloat(desiredDose);
+
+    if (!vialAmount || isNaN(vial) || vial <= 0) { setError('Enter a valid vial amount.'); return; }
+    if (!bacWater || isNaN(water) || water <= 0) { setError('Enter a valid BAC water amount.'); return; }
+    if (!desiredDose || isNaN(dose) || dose <= 0) { setError('Enter a valid desired dose.'); return; }
+    if (peptide === 'Custom' && !customName.trim()) { setError('Enter the compound name.'); return; }
+
+    // Unit compatibility check
+    const vialIsIU = vialUnit === 'IU';
+    const doseIsIU = doseUnit === 'IU';
+    if (vialIsIU !== doseIsIU) {
+      setError('Vial and dose units are incompatible. Both must use IU, or both must use mg/mcg.');
+      return;
+    }
+
+    let concentration: number;
+    let volumeMl: number;
+    let concUnit: string;
+    let amountPerUnit: number;
+
+    if (vialIsIU && doseIsIU) {
+      // IU path
+      concentration = vial / water;  // IU/mL
+      volumeMl = dose / concentration;
+      concUnit = 'IU/mL';
+      amountPerUnit = concentration / 100;  // IU per syringe unit
+    } else {
+      // mg/mcg path — normalize to mcg
+      const vialMcg = toMcg(vial, vialUnit)!;
+      const doseMcg = toMcg(dose, doseUnit)!;
+
+      concentration = vialMcg / water;      // mcg/mL
+      volumeMl = doseMcg / concentration;
+      concUnit = 'mcg/mL';
+      amountPerUnit = concentration / 100;  // mcg per syringe unit
+    }
+
+    if (isNaN(volumeMl) || !isFinite(volumeMl)) {
+      setError('Calculation resulted in an invalid number. Check your inputs.');
+      return;
+    }
+
+    // Check dose doesn't exceed vial
+    let exceedsVial = false;
+    if (vialIsIU) {
+      exceedsVial = parseFloat(desiredDose) > vial;
+    } else {
+      const doseMcg = toMcg(dose, doseUnit)!;
+      const vialMcg = toMcg(vial, vialUnit)!;
+      exceedsVial = doseMcg > vialMcg;
+    }
+    if (exceedsVial) {
+      setError('Desired dose exceeds the total amount in the vial.');
+      return;
+    }
+
+    const syringeUnits = volumeMl * 100;
+    const dosesPerVial = vialIsIU
+      ? vial / parseFloat(desiredDose)
+      : toMcg(vial, vialUnit)! / toMcg(dose, doseUnit)!;
+
+    const warnings: string[] = [];
+    if (syringeUnits > syringeSize) {
+      warnings.push(`This volume (${fmt(syringeUnits, 1)} units) exceeds the selected ${syringeSize}-unit syringe capacity.`);
+    }
+    if (syringeUnits < 1) {
+      warnings.push('This amount is below 1 syringe unit and may be difficult to measure accurately.');
+    } else if (syringeUnits < 2) {
+      warnings.push('This small amount may be difficult to measure accurately using the selected syringe.');
+    }
+    if (dosesPerVial < 1) {
+      warnings.push('The desired dose exceeds what one vial can provide in a single injection.');
+    }
+
+    setResult({ syringeUnits, volumeMl, concentration, concentrationUnit: concUnit, amountPerUnit, dosesPerVial, warnings });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [vialAmount, vialUnit, bacWater, desiredDose, doseUnit, peptide, customName, syringeSize]);
+
+  const handleStartCycle = () => {
+    if (!result) return;
+    if (!isAuthenticated) {
+      router.push('/auth/login');
+      return;
+    }
+    router.push({
+      pathname: '/add-cycle',
+      params: {
+        prefillPeptide: peptide === 'Custom' ? customName : peptide,
+        prefillVialAmount: vialAmount,
+        prefillVialUnit: vialUnit,
+        prefillBacWater: bacWater,
+        prefillDose: desiredDose,
+        prefillDoseUnit: doseUnit,
+        prefillVolumeMl: String(result.volumeMl),
+        prefillSyringeUnits: String(result.syringeUnits),
+        prefillSyringeSize: String(syringeSize === 100 ? 1.0 : 0.5),
+      },
+    });
   };
 
-  const styles = makeStyles(colors);
+  const filteredPeptides = peptideSearch
+    ? PEPTIDES.filter((p) => p.toLowerCase().includes(peptideSearch.toLowerCase()))
+    : PEPTIDES;
+
+  const s = makeStyles(colors);
 
   return (
-    <View style={[styles.container, { paddingTop: topPad }]}>
+    <View style={[s.container, { paddingTop: topPad }]}>
       <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        style={s.scroll}
+        contentContainerStyle={s.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Dosage Calculator</Text>
-          <Text style={styles.headerSubtitle}>Peptide reconstitution guide</Text>
+        <View style={s.header}>
+          <Text style={s.headerTitle}>Dosage Calculator</Text>
+          <Text style={s.headerSub}>Reconstitution & volume calculator</Text>
         </View>
 
-        {/* Peptide Selector */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Peptide</Text>
+        {/* Peptide */}
+        <View style={s.field}>
+          <Text style={s.label}>Peptide</Text>
           <TouchableOpacity
-            style={styles.selector}
-            onPress={() => setPeptideModalVisible(true)}
+            style={s.selector}
+            onPress={() => { setPeptideModal(true); setPeptideSearch(''); }}
             activeOpacity={0.7}
           >
-            <Text style={styles.selectorText}>{selectedPeptide}</Text>
+            <Text style={s.selectorText}>{peptide}</Text>
             <Feather name="chevron-down" size={18} color={colors.mutedForeground} />
           </TouchableOpacity>
-        </View>
-
-        {/* Inputs */}
-        <View style={styles.inputRow}>
-          <View style={[styles.inputGroup, { marginRight: 8 }]}>
-            <Text style={styles.inputLabel}>Vial Size (mg)</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                value={vialSizeMg}
-                onChangeText={setVialSizeMg}
-                placeholder="e.g. 5"
-                placeholderTextColor={colors.mutedForeground}
-                keyboardType="decimal-pad"
-              />
-              <Text style={styles.inputUnit}>mg</Text>
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>BAC Water (mL)</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                value={bacWaterMl}
-                onChangeText={setBacWaterMl}
-                placeholder="e.g. 2"
-                placeholderTextColor={colors.mutedForeground}
-                keyboardType="decimal-pad"
-              />
-              <Text style={styles.inputUnit}>mL</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.inputLabel}>Desired Dose</Text>
-          <View style={styles.inputWrapper}>
+          {peptide === 'Custom' && (
             <TextInput
-              style={[styles.input, { flex: 1 }]}
-              value={desiredDoseMcg}
-              onChangeText={setDesiredDoseMcg}
+              style={[s.input, { marginTop: 8 }]}
+              value={customName}
+              onChangeText={setCustomName}
+              placeholder="Compound name (required)"
+              placeholderTextColor={colors.mutedForeground}
+              autoCapitalize="words"
+            />
+          )}
+        </View>
+
+        {/* Vial Strength */}
+        <View style={s.field}>
+          <Text style={s.label}>Vial Strength</Text>
+          <Text style={s.helper}>Enter the total amount listed on the vial.</Text>
+          <View style={s.inputRow}>
+            <TextInput
+              style={[s.input, { flex: 1, marginRight: 8 }]}
+              value={vialAmount}
+              onChangeText={(t) => { setVialAmount(t); setResult(null); setError(''); }}
+              placeholder="e.g. 5"
+              placeholderTextColor={colors.mutedForeground}
+              keyboardType="decimal-pad"
+            />
+            <TouchableOpacity
+              style={s.unitBtn}
+              onPress={() => setVialUnitModal(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={s.unitBtnText}>{vialUnit}</Text>
+              <Feather name="chevron-down" size={14} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* BAC Water */}
+        <View style={s.field}>
+          <Text style={s.label}>BAC Water Added</Text>
+          <View style={s.inputWrapper}>
+            <TextInput
+              style={[s.input, { flex: 1 }]}
+              value={bacWater}
+              onChangeText={(t) => { setBacWater(t); setResult(null); setError(''); }}
+              placeholder="e.g. 2"
+              placeholderTextColor={colors.mutedForeground}
+              keyboardType="decimal-pad"
+            />
+            <Text style={s.inlineUnit}>mL</Text>
+          </View>
+        </View>
+
+        {/* Desired Dose */}
+        <View style={s.field}>
+          <Text style={s.label}>Desired Dose</Text>
+          <View style={s.inputRow}>
+            <TextInput
+              style={[s.input, { flex: 1, marginRight: 8 }]}
+              value={desiredDose}
+              onChangeText={(t) => { setDesiredDose(t); setResult(null); setError(''); }}
               placeholder="e.g. 250"
               placeholderTextColor={colors.mutedForeground}
               keyboardType="decimal-pad"
             />
             <TouchableOpacity
-              style={styles.unitButton}
-              onPress={() => {
-                setUnitModalVisible(true);
-                Haptics.selectionAsync();
-              }}
+              style={s.unitBtn}
+              onPress={() => setDoseUnitModal(true)}
               activeOpacity={0.7}
             >
-              <Text style={styles.unitButtonText}>{doseUnit}</Text>
-              <Feather name="chevron-down" size={13} color={colors.mutedForeground} />
+              <Text style={s.unitBtnText}>{doseUnit}</Text>
+              <Feather name="chevron-down" size={14} color={colors.mutedForeground} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* How to use info */}
-        <View style={styles.infoCard}>
-          <MaterialCommunityIcons name="information-outline" size={16} color={colors.primary} />
-          <Text style={styles.infoText}>
-            Add BAC water to your vial to reconstitute the peptide. This calculator tells you how many units to draw.
-          </Text>
+        {/* Syringe Size */}
+        <View style={s.field}>
+          <Text style={s.label}>Syringe Size</Text>
+          <Text style={s.helper}>U-100: 100 units = 1 mL, 1 unit = 0.01 mL</Text>
+          <View style={s.syringeRow}>
+            {([
+              { size: 100, label: '1.0 mL (100u)' },
+              { size: 50, label: '0.5 mL (50u)' },
+            ] as const).map(({ size, label }) => (
+              <TouchableOpacity
+                key={size}
+                style={[
+                  s.syringeChip,
+                  syringeSize === size && { backgroundColor: colors.primary, borderColor: colors.primary },
+                ]}
+                onPress={() => { setSyringeSize(size); setResult(null); Haptics.selectionAsync(); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[s.syringeChipText, syringeSize === size && { color: colors.primaryForeground }]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
+        {/* Error */}
+        {error ? (
+          <View style={s.errorBox}>
+            <Feather name="alert-circle" size={15} color={colors.destructive} />
+            <Text style={s.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
         {/* Calculate Button */}
-        <TouchableOpacity style={styles.calcButton} onPress={calculate} activeOpacity={0.8}>
+        <TouchableOpacity style={s.calcBtn} onPress={calculate} activeOpacity={0.8}>
           <MaterialCommunityIcons name="calculator-variant" size={20} color={colors.primaryForeground} />
-          <Text style={styles.calcButtonText}>Calculate</Text>
+          <Text style={s.calcBtnText}>Calculate</Text>
         </TouchableOpacity>
 
-        {/* Results */}
+        {/* Result Card */}
         {result && (
-          <View style={styles.resultCard}>
-            <View style={styles.resultHeader}>
-              <Text style={styles.resultTitle}>Results</Text>
-              <TouchableOpacity onPress={reset} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Feather name="x" size={18} color={colors.mutedForeground} />
-              </TouchableOpacity>
+          <View style={s.resultCard}>
+            {/* Primary result */}
+            <View style={s.primaryResult}>
+              <Text style={s.drawLabel}>Draw to</Text>
+              <Text style={s.drawValue}>{fmt(result.syringeUnits, 1)} units</Text>
+              <Text style={s.drawSub}>on a {syringeSize}-unit U-100 insulin syringe</Text>
             </View>
 
-            {/* Syringe size toggle */}
-            <View style={[styles.syringeToggle, { backgroundColor: colors.muted }]}>
-              <Text style={[styles.syringeToggleLabel, { color: colors.mutedForeground }]}>Syringe:</Text>
-              {([100, 50] as const).map((size) => (
-                <TouchableOpacity
-                  key={size}
-                  style={[
-                    styles.syringeToggleBtn,
-                    syringeSize === size && { backgroundColor: colors.card },
-                  ]}
-                  onPress={() => {
-                    setSyringeSize(size);
-                    Haptics.selectionAsync();
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.syringeToggleBtnText,
-                      { color: syringeSize === size ? colors.foreground : colors.mutedForeground },
-                      syringeSize === size && { fontFamily: 'Inter_600SemiBold' },
-                    ]}
-                  >
-                    {size}u
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {/* Syringe diagram */}
+            <SyringeDiagram units={result.syringeUnits} max={syringeSize} colors={colors} />
 
-            <View style={styles.metricsGrid}>
-              <View style={[styles.metricBox, { backgroundColor: colors.muted }]}>
-                <Text style={styles.metricValue}>
-                  {formatNum(result.concentrationMcgPerMl)}
-                </Text>
-                <Text style={styles.metricLabel}>mcg / mL</Text>
-                <Text style={styles.metricDesc}>Concentration</Text>
+            <View style={s.divider} />
+
+            {/* Metrics grid */}
+            <View style={s.metricsGrid}>
+              <View style={[s.metricBox, { backgroundColor: colors.muted }]}>
+                <Text style={s.metricVal}>{fmt(result.volumeMl, 3)}</Text>
+                <Text style={s.metricUnit}>mL</Text>
+                <Text style={s.metricDesc}>Volume</Text>
               </View>
-
-              <View style={[styles.metricBox, { backgroundColor: colors.primary + '18' }]}>
-                <Text style={[styles.metricValue, { color: colors.primary }]}>
-                  {formatNum(result.volumeMl, 3)}
-                </Text>
-                <Text style={[styles.metricLabel, { color: colors.primary }]}>mL to draw</Text>
-                <Text style={styles.metricDesc}>Volume</Text>
+              <View style={[s.metricBox, { backgroundColor: colors.muted }]}>
+                <Text style={s.metricVal}>{fmt(result.concentration)}</Text>
+                <Text style={s.metricUnit}>{result.concentrationUnit}</Text>
+                <Text style={s.metricDesc}>Concentration</Text>
               </View>
-
-              <View style={[styles.metricBox, { backgroundColor: colors.success + '18' }]}>
-                <Text style={[styles.metricValue, { color: colors.success }]}>
-                  {formatNum(result.volumeMl * syringeSize, 1)}
-                </Text>
-                <Text style={[styles.metricLabel, { color: colors.success }]}>{syringeSize}u syringe</Text>
-                <Text style={styles.metricDesc}>Draw to</Text>
+              <View style={[s.metricBox, { backgroundColor: colors.muted }]}>
+                <Text style={s.metricVal}>{fmt(result.amountPerUnit)}</Text>
+                <Text style={s.metricUnit}>{result.concentrationUnit.replace('/mL', '')}/unit</Text>
+                <Text style={s.metricDesc}>Per syringe unit</Text>
+              </View>
+              <View style={[s.metricBox, { backgroundColor: colors.muted }]}>
+                <Text style={s.metricVal}>{fmt(result.dosesPerVial, 1)}</Text>
+                <Text style={s.metricUnit}>doses</Text>
+                <Text style={s.metricDesc}>Per vial</Text>
               </View>
             </View>
 
-            <View style={styles.resultNote}>
-              <MaterialCommunityIcons name="needle" size={14} color={colors.mutedForeground} />
-              <Text style={styles.resultNoteText}>
-                Draw to <Text style={styles.bold}>{formatNum(result.volumeMl * syringeSize, 1)} units</Text> on a {syringeSize}-unit insulin syringe for your{' '}
-                <Text style={styles.bold}>{formatNum(result.volumeMl, 3)} mL</Text> dose.
-              </Text>
-            </View>
+            {/* Warnings */}
+            {result.warnings.map((w, i) => (
+              <View key={i} style={s.warningBox}>
+                <Feather name="alert-triangle" size={14} color={colors.warning} />
+                <Text style={s.warningText}>{w}</Text>
+              </View>
+            ))}
+
+            {/* Start Cycle button */}
+            <TouchableOpacity style={s.cycleBtnLarge} onPress={handleStartCycle} activeOpacity={0.8}>
+              <Feather name="calendar" size={18} color={colors.primaryForeground} />
+              <Text style={s.cycleBtnText}>Start Cycle in Calendar</Text>
+            </TouchableOpacity>
           </View>
         )}
+
+        {/* Disclaimer */}
+        <View style={s.disclaimerBox}>
+          <Text style={s.disclaimerText}>
+            For informational tracking and mathematical calculation only. This app does not provide medical advice, recommend dosages, diagnose conditions, or replace a licensed healthcare professional. Always verify calculations, syringe type, concentration, and product labeling before use.
+          </Text>
+        </View>
 
         <View style={{ height: Platform.OS === 'web' ? 120 : 100 }} />
       </ScrollView>
 
-      {/* Dose Unit Picker Modal */}
-      <Modal
-        visible={unitModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setUnitModalVisible(false)}
-      >
-        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Dose Unit</Text>
-            <TouchableOpacity onPress={() => setUnitModalVisible(false)}>
+      {/* Peptide Picker Modal */}
+      <Modal visible={peptideModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPeptideModal(false)}>
+        <View style={[s.modal, { backgroundColor: colors.background }]}>
+          <View style={s.modalHeader}>
+            <Text style={s.modalTitle}>Select Peptide</Text>
+            <TouchableOpacity onPress={() => setPeptideModal(false)}>
               <Feather name="x" size={22} color={colors.foreground} />
             </TouchableOpacity>
           </View>
+          <View style={[s.searchBox, { backgroundColor: colors.muted }]}>
+            <Feather name="search" size={16} color={colors.mutedForeground} />
+            <TextInput
+              style={[s.searchInput, { color: colors.foreground }]}
+              value={peptideSearch}
+              onChangeText={setPeptideSearch}
+              placeholder="Search..."
+              placeholderTextColor={colors.mutedForeground}
+              autoCapitalize="none"
+            />
+          </View>
           <FlatList
-            data={DOSE_UNITS}
+            data={filteredPeptides}
             keyExtractor={(item) => item}
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={[
-                  styles.peptideRow,
-                  doseUnit === item && { backgroundColor: colors.primary + '18' },
-                ]}
-                onPress={() => {
-                  setDoseUnit(item);
-                  setResult(null);
-                  setUnitModalVisible(false);
-                  Haptics.selectionAsync();
-                }}
+                style={[s.listRow, peptide === item && { backgroundColor: colors.primary + '18' }]}
+                onPress={() => { setPeptide(item); setResult(null); setPeptideModal(false); Haptics.selectionAsync(); }}
                 activeOpacity={0.7}
               >
-                <Text
-                  style={[
-                    styles.peptideName,
-                    doseUnit === item && { color: colors.primary, fontFamily: 'Inter_600SemiBold' },
-                  ]}
-                >
-                  {item}
-                </Text>
-                {doseUnit === item && (
-                  <Feather name="check" size={18} color={colors.primary} />
-                )}
+                <Text style={[s.listRowText, peptide === item && { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>{item}</Text>
+                {peptide === item && <Feather name="check" size={18} color={colors.primary} />}
               </TouchableOpacity>
             )}
             contentContainerStyle={{ paddingBottom: 40 }}
@@ -339,53 +493,49 @@ export default function CalculatorScreen() {
         </View>
       </Modal>
 
-      {/* Peptide Picker Modal */}
-      <Modal
-        visible={peptideModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setPeptideModalVisible(false)}
-      >
-        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Peptide</Text>
-            <TouchableOpacity onPress={() => setPeptideModalVisible(false)}>
+      {/* Vial Unit Modal */}
+      <Modal visible={vialUnitModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setVialUnitModal(false)}>
+        <View style={[s.modal, { backgroundColor: colors.background }]}>
+          <View style={s.modalHeader}>
+            <Text style={s.modalTitle}>Vial Unit</Text>
+            <TouchableOpacity onPress={() => setVialUnitModal(false)}>
               <Feather name="x" size={22} color={colors.foreground} />
             </TouchableOpacity>
           </View>
-          <FlatList
-            data={PEPTIDES}
-            keyExtractor={(item) => item.name}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[
-                  styles.peptideRow,
-                  selectedPeptide === item.name && { backgroundColor: colors.primary + '18' },
-                ]}
-                onPress={() => {
-                  setSelectedPeptide(item.name);
-                  if (item.vialSize > 0) setVialSizeMg(String(item.vialSize));
-                  if (item.defaultDose > 0) setDesiredDoseMcg(String(item.defaultDose));
-                  setPeptideModalVisible(false);
-                  Haptics.selectionAsync();
-                }}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.peptideName,
-                    selectedPeptide === item.name && { color: colors.primary, fontFamily: 'Inter_600SemiBold' },
-                  ]}
-                >
-                  {item.name}
-                </Text>
-                {selectedPeptide === item.name && (
-                  <Feather name="check" size={18} color={colors.primary} />
-                )}
-              </TouchableOpacity>
-            )}
-            contentContainerStyle={{ paddingBottom: 40 }}
-          />
+          {VIAL_UNITS.map((u) => (
+            <TouchableOpacity
+              key={u}
+              style={[s.listRow, vialUnit === u && { backgroundColor: colors.primary + '18' }]}
+              onPress={() => { setVialUnit(u as any); setResult(null); setVialUnitModal(false); Haptics.selectionAsync(); }}
+              activeOpacity={0.7}
+            >
+              <Text style={[s.listRowText, vialUnit === u && { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>{u}</Text>
+              {vialUnit === u && <Feather name="check" size={18} color={colors.primary} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Modal>
+
+      {/* Dose Unit Modal */}
+      <Modal visible={doseUnitModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDoseUnitModal(false)}>
+        <View style={[s.modal, { backgroundColor: colors.background }]}>
+          <View style={s.modalHeader}>
+            <Text style={s.modalTitle}>Dose Unit</Text>
+            <TouchableOpacity onPress={() => setDoseUnitModal(false)}>
+              <Feather name="x" size={22} color={colors.foreground} />
+            </TouchableOpacity>
+          </View>
+          {DOSE_UNITS.map((u) => (
+            <TouchableOpacity
+              key={u}
+              style={[s.listRow, doseUnit === u && { backgroundColor: colors.primary + '18' }]}
+              onPress={() => { setDoseUnit(u as any); setResult(null); setDoseUnitModal(false); Haptics.selectionAsync(); }}
+              activeOpacity={0.7}
+            >
+              <Text style={[s.listRowText, doseUnit === u && { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>{u}</Text>
+              {doseUnit === u && <Feather name="check" size={18} color={colors.primary} />}
+            </TouchableOpacity>
+          ))}
         </View>
       </Modal>
     </View>
@@ -394,268 +544,104 @@ export default function CalculatorScreen() {
 
 function makeStyles(colors: ReturnType<typeof useColors>) {
   return StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    scroll: {
-      flex: 1,
-    },
-    scrollContent: {
-      paddingHorizontal: 20,
-      paddingTop: 8,
-    },
-    header: {
-      marginBottom: 24,
-      marginTop: 8,
-    },
-    headerTitle: {
-      fontSize: 28,
-      fontFamily: 'Inter_700Bold',
-      color: colors.foreground,
-      letterSpacing: -0.5,
-    },
-    headerSubtitle: {
-      fontSize: 14,
-      fontFamily: 'Inter_400Regular',
-      color: colors.mutedForeground,
-      marginTop: 2,
-    },
-    section: {
-      marginBottom: 16,
-    },
-    sectionLabel: {
-      fontSize: 13,
-      fontFamily: 'Inter_600SemiBold',
-      color: colors.mutedForeground,
-      textTransform: 'uppercase',
-      letterSpacing: 0.8,
-      marginBottom: 8,
-    },
+    container: { flex: 1, backgroundColor: colors.background },
+    scroll: { flex: 1 },
+    scrollContent: { paddingHorizontal: 20, paddingTop: 8 },
+    header: { marginBottom: 24, marginTop: 8 },
+    headerTitle: { fontSize: 28, fontFamily: 'Inter_700Bold', color: colors.foreground, letterSpacing: -0.5 },
+    headerSub: { fontSize: 14, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 2 },
+    field: { marginBottom: 18 },
+    label: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
+    helper: { fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginBottom: 8 },
     selector: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: colors.card,
-      borderRadius: colors.radius,
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingHorizontal: 16,
-      paddingVertical: 14,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      backgroundColor: colors.card, borderRadius: colors.radius, borderWidth: 1, borderColor: colors.border,
+      paddingHorizontal: 16, paddingVertical: 14,
     },
-    selectorText: {
-      fontSize: 16,
-      fontFamily: 'Inter_500Medium',
-      color: colors.foreground,
-    },
-    inputRow: {
-      flexDirection: 'row',
-      marginBottom: 16,
-    },
-    inputGroup: {
-      flex: 1,
-    },
-    inputLabel: {
-      fontSize: 13,
-      fontFamily: 'Inter_600SemiBold',
-      color: colors.mutedForeground,
-      textTransform: 'uppercase',
-      letterSpacing: 0.8,
-      marginBottom: 8,
-    },
-    inputWrapper: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.card,
-      borderRadius: colors.radius,
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingHorizontal: 16,
-      paddingVertical: 2,
-    },
+    selectorText: { fontSize: 16, fontFamily: 'Inter_500Medium', color: colors.foreground },
     input: {
-      flex: 1,
-      fontSize: 16,
-      fontFamily: 'Inter_500Medium',
-      color: colors.foreground,
-      paddingVertical: 12,
+      backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+      borderRadius: colors.radius, paddingHorizontal: 16, paddingVertical: 13,
+      fontSize: 16, fontFamily: 'Inter_400Regular', color: colors.foreground,
     },
-    inputUnit: {
-      fontSize: 14,
-      fontFamily: 'Inter_400Regular',
-      color: colors.mutedForeground,
-      marginLeft: 8,
+    inputRow: { flexDirection: 'row', alignItems: 'center' },
+    inputWrapper: {
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+      borderRadius: colors.radius, paddingHorizontal: 16, paddingVertical: 2,
     },
-    unitButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingLeft: 10,
-      paddingRight: 2,
-      paddingVertical: 4,
-      borderLeftWidth: StyleSheet.hairlineWidth,
-      borderLeftColor: colors.border,
-      marginLeft: 4,
+    inlineUnit: { fontSize: 14, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginLeft: 8 },
+    unitBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 6,
+      backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+      borderRadius: colors.radius, paddingHorizontal: 14, paddingVertical: 13, minWidth: 80,
     },
-    unitButtonText: {
-      fontSize: 15,
-      fontFamily: 'Inter_600SemiBold',
-      color: colors.primary,
+    unitBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: colors.primary },
+    syringeRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+    syringeChip: {
+      paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20,
+      borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card,
     },
-    infoCard: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      backgroundColor: colors.primary + '12',
-      borderRadius: colors.radius,
-      padding: 12,
-      marginBottom: 20,
-      gap: 8,
+    syringeChipText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: colors.foreground },
+    errorBox: {
+      flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+      backgroundColor: colors.destructive + '18', borderRadius: colors.radius - 4,
+      padding: 12, marginBottom: 12,
     },
-    infoText: {
-      flex: 1,
-      fontSize: 13,
-      fontFamily: 'Inter_400Regular',
-      color: colors.mutedForeground,
-      lineHeight: 19,
+    errorText: { flex: 1, fontSize: 14, fontFamily: 'Inter_400Regular', color: colors.destructive },
+    calcBtn: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: colors.primary, borderRadius: colors.radius,
+      paddingVertical: 16, gap: 8, marginBottom: 20,
     },
-    calcButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.primary,
-      borderRadius: colors.radius,
-      paddingVertical: 16,
-      gap: 8,
-      marginBottom: 20,
-    },
-    calcButtonText: {
-      fontSize: 16,
-      fontFamily: 'Inter_700Bold',
-      color: colors.primaryForeground,
-    },
+    calcBtnText: { fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.primaryForeground },
+    // Result card
     resultCard: {
-      backgroundColor: colors.card,
-      borderRadius: colors.radius,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: 20,
-      marginBottom: 16,
+      backgroundColor: colors.card, borderRadius: colors.radius,
+      borderWidth: 1, borderColor: colors.border, padding: 20, marginBottom: 16,
     },
-    resultHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 12,
+    primaryResult: { alignItems: 'center', paddingBottom: 4 },
+    drawLabel: { fontSize: 14, fontFamily: 'Inter_500Medium', color: colors.mutedForeground },
+    drawValue: { fontSize: 52, fontFamily: 'Inter_700Bold', color: colors.primary, letterSpacing: -2, lineHeight: 60 },
+    drawSub: { fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 2 },
+    divider: { height: 1, backgroundColor: colors.border, marginVertical: 16 },
+    metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+    metricBox: { borderRadius: colors.radius - 4, padding: 12, alignItems: 'center', minWidth: '45%', flex: 1 },
+    metricVal: { fontSize: 20, fontFamily: 'Inter_700Bold', color: colors.foreground, letterSpacing: -0.5 },
+    metricUnit: { fontSize: 11, fontFamily: 'Inter_500Medium', color: colors.mutedForeground, marginTop: 2 },
+    metricDesc: { fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 3 },
+    warningBox: {
+      flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+      backgroundColor: colors.warning + '18', borderRadius: colors.radius - 4,
+      padding: 10, marginBottom: 8,
     },
-    syringeToggle: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      borderRadius: colors.radius - 4,
-      padding: 4,
-      marginBottom: 16,
-      gap: 4,
+    warningText: { flex: 1, fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.warning, lineHeight: 18 },
+    cycleBtnLarge: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: colors.primary, borderRadius: colors.radius,
+      paddingVertical: 14, gap: 8, marginTop: 12,
     },
-    syringeToggleLabel: {
-      fontSize: 12,
-      fontFamily: 'Inter_500Medium',
-      marginLeft: 4,
-      marginRight: 4,
+    cycleBtnText: { fontSize: 15, fontFamily: 'Inter_700Bold', color: colors.primaryForeground },
+    disclaimerBox: {
+      backgroundColor: colors.muted, borderRadius: colors.radius - 4,
+      padding: 14, marginBottom: 8,
     },
-    syringeToggleBtn: {
-      flex: 1,
-      alignItems: 'center',
-      paddingVertical: 7,
-      borderRadius: colors.radius - 6,
+    disclaimerText: { fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, lineHeight: 16, textAlign: 'center' },
+    // Modals
+    modal: { flex: 1, paddingTop: 20 },
+    modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+    modalTitle: { fontSize: 20, fontFamily: 'Inter_700Bold', color: colors.foreground },
+    searchBox: {
+      flexDirection: 'row', alignItems: 'center', gap: 10,
+      marginHorizontal: 20, marginVertical: 12,
+      borderRadius: colors.radius - 4, paddingHorizontal: 14, paddingVertical: 10,
     },
-    syringeToggleBtnText: {
-      fontSize: 13,
-      fontFamily: 'Inter_500Medium',
+    searchInput: { flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular' },
+    listRow: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 20, paddingVertical: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
     },
-    resultTitle: {
-      fontSize: 18,
-      fontFamily: 'Inter_700Bold',
-      color: colors.foreground,
-    },
-    metricsGrid: {
-      flexDirection: 'row',
-      gap: 10,
-      marginBottom: 16,
-    },
-    metricBox: {
-      flex: 1,
-      borderRadius: colors.radius - 4,
-      padding: 12,
-      alignItems: 'center',
-    },
-    metricValue: {
-      fontSize: 22,
-      fontFamily: 'Inter_700Bold',
-      color: colors.foreground,
-      letterSpacing: -0.5,
-    },
-    metricLabel: {
-      fontSize: 11,
-      fontFamily: 'Inter_500Medium',
-      color: colors.mutedForeground,
-      marginTop: 2,
-    },
-    metricDesc: {
-      fontSize: 11,
-      fontFamily: 'Inter_400Regular',
-      color: colors.mutedForeground,
-      marginTop: 4,
-    },
-    resultNote: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      backgroundColor: colors.muted,
-      borderRadius: colors.radius - 4,
-      padding: 12,
-      gap: 8,
-    },
-    resultNoteText: {
-      flex: 1,
-      fontSize: 13,
-      fontFamily: 'Inter_400Regular',
-      color: colors.mutedForeground,
-      lineHeight: 19,
-    },
-    bold: {
-      fontFamily: 'Inter_600SemiBold',
-      color: colors.foreground,
-    },
-    // Modal
-    modalContainer: {
-      flex: 1,
-      paddingTop: 20,
-    },
-    modalHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      paddingBottom: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    modalTitle: {
-      fontSize: 20,
-      fontFamily: 'Inter_700Bold',
-      color: colors.foreground,
-    },
-    peptideRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      paddingVertical: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
-    },
-    peptideName: {
-      fontSize: 16,
-      fontFamily: 'Inter_400Regular',
-      color: colors.foreground,
-    },
+    listRowText: { fontSize: 16, fontFamily: 'Inter_400Regular', color: colors.foreground },
   });
 }

@@ -1,0 +1,818 @@
+Build a production-ready, mobile-first web app for calculating reconstituted peptide doses, scheduling injection cycles, and recording journal entries.
+
+This must be a functional MVP, not a static mockup. All calculations, forms, navigation, editing, calendar population, and data persistence must work.
+
+WORKING APP NAME
+Use “Peptide Tracker” as a temporary name. Keep the name and logo easy to replace later.
+
+PRODUCT GOAL
+The app should let a user:
+
+1. Calculate how much liquid to draw into a syringe based on vial strength, bacteriostatic water, and desired dose.
+2. Turn that calculation into a scheduled cycle.
+3. View scheduled injections in weekly and monthly calendars.
+4. Track the current week of each cycle.
+5. Edit doses, schedules, and cycle details without deleting historical records.
+6. Record dose changes, observations, and general notes in a journal.
+
+The app must not recommend doses or provide medical treatment advice. It only performs arithmetic and tracks information entered by the user.
+
+PLATFORM AND TECH STACK
+Build this as an installable, responsive Progressive Web App that works well on mobile and desktop.
+
+Preferred stack:
+- React with TypeScript
+- Next.js or another modern React framework
+- Tailwind CSS
+- shadcn/ui or similarly clean component library
+- PostgreSQL database
+- Supabase for authentication, database, and row-level security
+- Use the user’s local timezone for calendar events
+
+Use current stable package versions.
+
+NAVIGATION
+Use a simple mobile bottom navigation bar with three primary pages:
+
+1. Calculator
+2. Calendar
+3. Journal
+
+Place Settings and Account access in a small icon in the top-right corner.
+
+The Calculator should be the default landing page.
+
+DESIGN DIRECTION
+The app should look sleek, minimal, and modern.
+
+Visual requirements:
+- Mobile-first layout
+- White or off-white background in light mode
+- Dark charcoal background in dark mode
+- One restrained accent color, such as deep blue, muted teal, or indigo
+- Clean sans-serif typography
+- Large, readable numbers for calculation results
+- Generous spacing
+- Rounded cards and inputs
+- Subtle borders and shadows
+- Clear visual hierarchy
+- Large touch targets
+- Minimal animation
+- No gradients
+- No stock photos
+- No illustrations
+- No motivational language
+- No social feed
+- No cluttered dashboard
+- No unnecessary medical graphics
+
+Support light and dark mode using the user’s system preference, with a manual override in Settings.
+
+AUTHENTICATION
+Allow users to use the calculator without creating an account.
+
+Require login when the user tries to:
+- Save a cycle
+- Use the calendar
+- Create journal entries
+- Sync data between devices
+
+Support:
+- Email and password
+- Password reset
+- Optional magic-link login
+
+All user information must be private. Use database row-level security so users can only access their own cycles, injections, and journal entries.
+
+PAGE 1: DOSAGE CALCULATOR
+
+PURPOSE
+Calculate the volume of reconstituted solution the user needs to draw into a U-100 insulin syringe.
+
+FORM FIELDS
+
+1. Peptide
+Use a searchable dropdown.
+
+Seed the dropdown with:
+- BPC-157
+- TB-500
+- CJC-1295 without DAC
+- CJC-1295 with DAC
+- Ipamorelin
+- Sermorelin
+- Tesamorelin
+- GHK-Cu
+- PT-141
+- Kisspeptin
+- AOD-9604
+- MOTS-c
+- Epitalon
+- Semaglutide
+- Tirzepatide
+- Retatrutide
+- Custom
+
+Do not include recommended doses or default dosing instructions for any compound.
+
+When “Custom” is selected, display a required text field:
+- Compound name
+
+Store the peptide catalog in a configuration file or database table so the list can be edited later without rebuilding the entire calculator.
+
+2. Vial strength
+Fields:
+- Numeric amount
+- Unit dropdown: mg, mcg, or IU
+
+Example label:
+“Vial strength”
+
+Helper text:
+“Enter the total amount listed on the vial.”
+
+3. Bacteriostatic water added
+Field:
+- Numeric amount in mL
+
+Label:
+“BAC water added”
+
+Allow decimals such as:
+- 0.5 mL
+- 1 mL
+- 1.5 mL
+- 2 mL
+- 2.5 mL
+- 3 mL
+
+Do not restrict the user to preset values.
+
+4. Desired dose
+Fields:
+- Numeric amount
+- Unit dropdown: mcg, mg, or IU
+
+Do not provide a suggested or default desired dose.
+
+5. Syringe size
+Options:
+- 0.5 mL U-100 syringe — maximum 50 units
+- 1.0 mL U-100 syringe — maximum 100 units
+
+Clearly indicate that the calculations assume a U-100 syringe where:
+- 100 syringe units = 1 mL
+- 1 syringe unit = 0.01 mL
+
+CALCULATION RULES
+
+Normalize compatible mass units before calculating:
+- 1 mg = 1,000 mcg
+
+For mg or mcg inputs:
+
+concentration = total vial amount / BAC water in mL
+
+volume to draw in mL = desired dose / concentration
+
+U-100 syringe units = volume to draw in mL × 100
+
+Theoretical number of doses per vial = total vial amount / desired dose
+
+For IU inputs:
+- Vial strength and desired dose must both use IU
+- Calculate IU per mL
+- Do not attempt to convert IU to mg or mcg
+
+Block incompatible conversions such as:
+- Vial entered in mg and desired dose entered in IU
+- Vial entered in IU and desired dose entered in mcg
+
+CALCULATION RESULT CARD
+After the user presses “Calculate,” show a large, clean result card.
+
+The primary result should say:
+
+“Draw to XX units”
+
+Below it, show:
+- Volume: X.XX mL
+- Concentration: XXXX mcg/mL, mg/mL, or IU/mL
+- Amount per syringe unit: XX mcg, mg, or IU
+- Theoretical doses per vial: XX
+
+Use sensible decimal precision:
+- Syringe units: up to 1 decimal place
+- Volume: up to 3 decimal places
+- Concentration: up to 2 decimal places
+- Avoid unnecessary trailing zeros
+
+The words “Draw to XX units” should be the most visually prominent information on the screen.
+
+Add a simple visual representation of the selected syringe:
+- A horizontal syringe scale
+- Mark the calculated plunger position
+- Show 0–50 units for the 0.5 mL syringe
+- Show 0–100 units for the 1 mL syringe
+- Keep this diagram clean and functional, not decorative
+
+VALIDATION AND WARNINGS
+Prevent calculation when:
+- Required fields are empty
+- Any number is zero or negative
+- BAC water is zero
+- Desired dose exceeds the total amount in the vial
+- Units cannot be converted
+- Values are not valid numbers
+
+Show a warning when:
+- The calculated volume exceeds the selected syringe capacity
+- The result is below one syringe unit
+- The result requires a fraction of a syringe unit that may be difficult to measure
+- The theoretical number of doses is less than one
+
+Warnings should not prevent the user from seeing the calculation unless the calculation is mathematically invalid.
+
+Example warning:
+“This amount may be difficult to measure accurately using the selected syringe.”
+
+Do not tell the user whether a dose is medically safe, high, low, normal, or recommended.
+
+START CYCLE BUTTON
+Below the result card, include a prominent button:
+
+“Start Cycle in Calendar”
+
+When pressed:
+- Require login if the user is not signed in
+- Open the New Cycle screen
+- Automatically carry over all calculator information
+- Keep every field editable
+
+PAGE 2: NEW CYCLE / EDIT CYCLE
+
+This screen must be accessible from:
+- “Start Cycle in Calendar” on the Calculator page
+- “Add Cycle” on the Calendar page
+- An existing cycle’s Edit button
+
+CYCLE FIELDS
+
+Compound information:
+- Peptide or custom compound name
+- Vial strength
+- Vial unit
+- BAC water added
+- Desired dose
+- Desired-dose unit
+- Calculated volume
+- Calculated syringe units
+- Syringe size
+
+Cycle information:
+- Cycle name, optional
+- Start date
+- Cycle duration
+
+Cycle duration options:
+- Number of weeks
+- Specific end date
+- Ongoing with no end date
+
+If a number of weeks is selected, automatically calculate the end date.
+
+FREQUENCY OPTIONS
+Present frequency as large selectable options:
+
+1. Every day
+2. Specific days of the week
+3. X times per week
+4. Every X days
+
+SPECIFIC DAYS OF THE WEEK
+Display selectable day chips:
+- Monday
+- Tuesday
+- Wednesday
+- Thursday
+- Friday
+- Saturday
+- Sunday
+
+For “X times per week”:
+- Ask for the number of injections per week
+- Then require the user to select that exact number of weekdays
+- Optionally include an “Evenly distribute” button that chooses reasonably spaced days
+- The user must be able to override the suggested days
+
+For “Every X days”:
+- Ask for the interval
+- Example: every 2 days, every 3 days, every 7 days
+
+TIME OF DAY
+Allow:
+- One or more injection times per scheduled day
+- A time picker for each injection
+- An “Any time” option if the user does not want a specific time
+
+Do not require a time.
+
+CYCLE SUMMARY
+Before saving, show a concise summary:
+
+- Compound
+- Planned dose
+- Syringe units
+- Schedule
+- Start date
+- End date or ongoing status
+- Total expected injections, if the cycle has an end date
+
+SAVE ACTION
+Primary button:
+“Save Cycle”
+
+After saving:
+- Generate all scheduled injection events for the cycle
+- Navigate to the Calendar
+- Focus the calendar on the cycle’s start date
+- Show a brief confirmation message
+
+Only generate future events through the cycle end date. For ongoing cycles, generate a rolling set of future events, such as the next 90 days, and extend them automatically as needed.
+
+EDITING AN EXISTING CYCLE
+Users must be able to change:
+- Dose
+- Vial information
+- BAC water amount
+- Calculated syringe units
+- Syringe size
+- Schedule
+- Injection days
+- Injection times
+- Start date
+- End date
+- Cycle duration
+- Cycle name
+
+When changes affect scheduled events, ask:
+
+“Where should this change apply?”
+
+Options:
+- From today forward
+- From a selected date forward
+- Entire cycle
+
+Default to “From today forward.”
+
+Never overwrite completed or skipped historical injection records unless the user explicitly chooses to edit an individual past record.
+
+When a dose is changed:
+- Save the previous dose
+- Save the new dose
+- Save the effective date
+- Automatically create a Dose Change entry in the Journal
+- Preserve the old planned dose on historical events
+
+Allow users to:
+- Pause a cycle
+- Resume a paused cycle
+- End a cycle early
+- Archive a cycle
+- Delete a cycle
+
+Deleting a cycle should require confirmation. Prefer archiving rather than permanent deletion when historical records exist.
+
+PAGE 3: CALENDAR
+
+HEADER
+Show:
+- Current month or week
+- Previous and next navigation
+- “Today” button
+- Toggle for Weekly and Monthly view
+- “Add Cycle” button
+
+MONTHLY VIEW
+Display a standard monthly calendar grid.
+
+Each injection event should show:
+- Compound name
+- Planned dose or syringe units
+- Time, when one exists
+- Status indicator
+
+Keep event labels short enough to avoid clutter.
+
+When multiple events occur on one day:
+- Show the first few
+- Show “+X more” when necessary
+- Tapping the day opens a full daily schedule
+
+WEEKLY VIEW
+Use a seven-day schedule with more detail.
+
+Each event card should show:
+- Peptide name
+- Planned dose
+- Syringe units
+- Scheduled time
+- Current status
+
+CYCLE WEEK TRACKING
+For active cycles, show:
+- “Week X of Y” for fixed-length cycles
+- “Week X” for ongoing cycles
+
+The week calculation should be based on the cycle’s start date, not the beginning of the calendar year.
+
+EVENT STATUS
+Each injection event can have one of these statuses:
+- Scheduled
+- Completed
+- Skipped
+- Missed
+
+A scheduled event becomes “Missed” after its scheduled date or time passes without being completed or skipped.
+
+TAPPING AN INJECTION EVENT
+Open a bottom sheet or modal with:
+
+Planned details:
+- Compound
+- Planned dose
+- Planned syringe units
+- Scheduled date and time
+- Cycle week
+
+Actions:
+- Mark Completed
+- Mark Skipped
+- Edit This Entry
+- Edit Cycle
+
+When marking an event Completed, optionally allow:
+- Actual dose
+- Actual syringe units
+- Injection time
+- Injection site
+- Short note
+
+Injection-site options:
+- Abdomen
+- Thigh
+- Arm
+- Glute
+- Other
+
+Do not require an injection site.
+
+If the actual dose differs from the planned dose, preserve both values.
+
+DAILY SCHEDULE
+When a date is selected, display all events for that day in chronological order.
+
+Also allow:
+- Adding a journal entry for that date
+- Adding a one-time injection record
+- Viewing completed and skipped events
+
+ACTIVE CYCLES
+Provide a simple slide-over panel or compact section listing:
+- Active cycles
+- Current week
+- Next scheduled injection
+- Pause, edit, or archive actions
+
+Do not turn this into a large dashboard.
+
+PAGE 4: JOURNAL
+
+PURPOSE
+Allow the user to document dosage changes, reactions, observations, and general notes.
+
+JOURNAL HOME
+Show entries in reverse chronological order.
+
+Each entry card should show:
+- Date and time
+- Entry type
+- Linked peptide or cycle
+- Short preview of the note
+- Dose change summary when applicable
+
+ENTRY TYPES
+Provide three entry types:
+
+1. General Note
+2. Dose Change
+3. Observation
+
+GENERAL NOTE FIELDS
+- Date and time
+- Optional linked cycle
+- Note text
+
+DOSE CHANGE FIELDS
+- Date the change becomes effective
+- Cycle or peptide
+- Previous dose
+- New dose
+- Unit
+- Previous syringe units
+- New syringe units
+- Reason or note
+
+When a dose is changed from the Edit Cycle screen, automatically generate this entry.
+
+When a Dose Change is created manually in the Journal, ask:
+“Update the linked cycle with this new dose?”
+
+Options:
+- Update future cycle events
+- Save journal entry only
+
+OBSERVATION FIELDS
+- Date and time
+- Optional linked cycle
+- Note
+- Optional intensity rating from 1–10
+- Optional tags
+
+Starter tags:
+- Energy
+- Sleep
+- Appetite
+- Mood
+- Recovery
+- Pain
+- Digestion
+- Skin
+- Other
+
+These tags are for organization only. Do not interpret symptoms or provide medical conclusions.
+
+JOURNAL FEATURES
+Include:
+- Search
+- Filter by peptide
+- Filter by entry type
+- Filter by date range
+- Edit entry
+- Delete entry with confirmation
+- Export entries as CSV or PDF in a later version
+
+For the MVP, CSV export is sufficient if export is included.
+
+SETTINGS PAGE
+
+Include:
+- Account information
+- Light, dark, or system theme
+- Timezone
+- First day of week: Sunday or Monday
+- Default syringe size
+- Data export
+- Delete account
+- Privacy policy
+- Terms
+- Medical disclaimer
+
+Do not include marketing preferences or unnecessary notification settings in the first version.
+
+DATABASE STRUCTURE
+
+Create tables similar to the following:
+
+users
+- id
+- email
+- created_at
+- timezone
+- theme
+- first_day_of_week
+- default_syringe_size
+
+peptide_catalog
+- id
+- name
+- active
+- display_order
+
+cycles
+- id
+- user_id
+- peptide_catalog_id, nullable
+- custom_compound_name, nullable
+- cycle_name, nullable
+- vial_amount
+- vial_unit
+- bac_water_ml
+- desired_dose
+- dose_unit
+- calculated_volume_ml
+- calculated_syringe_units
+- syringe_capacity_ml
+- start_date
+- end_date, nullable
+- duration_weeks, nullable
+- ongoing
+- status
+- created_at
+- updated_at
+
+schedule_rules
+- id
+- cycle_id
+- frequency_type
+- injections_per_week, nullable
+- days_of_week, nullable JSON or array
+- interval_days, nullable
+- injection_times, nullable JSON or array
+- timezone
+- created_at
+- updated_at
+
+injection_events
+- id
+- user_id
+- cycle_id
+- scheduled_at
+- planned_dose
+- planned_dose_unit
+- planned_volume_ml
+- planned_syringe_units
+- actual_dose, nullable
+- actual_dose_unit, nullable
+- actual_volume_ml, nullable
+- actual_syringe_units, nullable
+- status
+- injection_site, nullable
+- note, nullable
+- completed_at, nullable
+- created_at
+- updated_at
+
+journal_entries
+- id
+- user_id
+- cycle_id, nullable
+- injection_event_id, nullable
+- entry_type
+- entry_date
+- body
+- previous_dose, nullable
+- new_dose, nullable
+- dose_unit, nullable
+- previous_syringe_units, nullable
+- new_syringe_units, nullable
+- intensity_rating, nullable
+- tags, nullable JSON or array
+- created_at
+- updated_at
+
+cycle_change_history
+- id
+- cycle_id
+- user_id
+- field_changed
+- previous_value
+- new_value
+- effective_date
+- created_at
+
+Use proper foreign keys, indexes, cascade rules, and row-level security.
+
+MEDICAL AND SAFETY LANGUAGE
+Display the following disclaimer during onboarding and beneath the calculator:
+
+“For informational tracking and mathematical calculation only. This app does not provide medical advice, recommend dosages, diagnose conditions, or replace a licensed healthcare professional. Always verify calculations, syringe type, concentration, and product labeling before use.”
+
+Add a checkbox the first time a user saves a cycle:
+“I understand that this app does not determine whether a dose is medically appropriate.”
+
+Do not require this checkbox repeatedly.
+
+The app must never:
+- Recommend a starting dose
+- Suggest increasing or decreasing a dose
+- Describe a dose as safe
+- Diagnose a reaction
+- Recommend purchasing a peptide
+- Link to peptide vendors
+- Make claims about product purity
+- Claim to be HIPAA compliant without a separate legal and technical review
+
+ERROR HANDLING
+Use clear inline error messages.
+
+Do not erase user-entered data when validation fails.
+
+Handle:
+- Network failures
+- Failed authentication
+- Failed saves
+- Duplicate calendar events
+- Timezone changes
+- Schedule changes
+- Invalid date ranges
+- Archived cycles
+- Missing catalog items
+- Deleted custom compounds
+
+Show a retry option when a save fails.
+
+ACCESSIBILITY
+Meet standard accessibility practices:
+- Keyboard-accessible forms
+- Proper labels
+- Strong contrast
+- Visible focus states
+- Screen-reader-friendly result text
+- Do not communicate status by color alone
+- Minimum comfortable mobile touch-target size
+- Respect reduced-motion preferences
+
+TESTING
+Create automated tests for the dosage calculation and schedule generation.
+
+Required calculator test cases:
+
+Test 1:
+- Vial strength: 5 mg
+- BAC water: 2 mL
+- Desired dose: 250 mcg
+Expected:
+- Concentration: 2,500 mcg/mL
+- Volume: 0.1 mL
+- U-100 syringe units: 10
+
+Test 2:
+- Vial strength: 10 mg
+- BAC water: 3 mL
+- Desired dose: 500 mcg
+Expected:
+- Concentration: approximately 3,333.33 mcg/mL
+- Volume: 0.15 mL
+- U-100 syringe units: 15
+
+Test 3:
+- Vial strength: 10,000 IU
+- BAC water: 4 mL
+- Desired dose: 250 IU
+Expected:
+- Concentration: 2,500 IU/mL
+- Volume: 0.1 mL
+- U-100 syringe units: 10
+
+Also test:
+- mg-to-mcg conversion
+- Invalid IU-to-mg conversion
+- Dose exceeding vial amount
+- Dose exceeding syringe capacity
+- Results below one syringe unit
+- Daily scheduling
+- Three-times-per-week scheduling
+- Every-three-days scheduling
+- Schedule edits that apply only to future events
+- Preservation of completed historical records
+
+MVP ACCEPTANCE CRITERIA
+
+The app is complete when:
+
+1. A user can calculate a syringe amount from vial strength, BAC water, and desired dose.
+2. The result clearly shows both mL and U-100 syringe units.
+3. The user can start a cycle directly from the calculation.
+4. The user can choose cycle duration, injection frequency, days, and times.
+5. Saved injections appear correctly in weekly and monthly calendar views.
+6. The calendar displays the correct current cycle week.
+7. The user can mark an injection completed or skipped.
+8. The user can edit a cycle and apply changes from a selected date forward.
+9. Historical completed events retain their original planned and actual values.
+10. Dose changes automatically appear in the Journal.
+11. Users can manually create, edit, search, filter, and delete journal entries.
+12. User data persists after logout and works across devices.
+13. Users cannot access another user’s information.
+14. The interface works cleanly on modern mobile and desktop browsers.
+15. There are no nonfunctional buttons or placeholder pages.
+
+OUT OF SCOPE FOR THE MVP
+Do not build:
+- AI dose recommendations
+- Medical diagnosis
+- Telemedicine features
+- Peptide purchasing
+- Vendor listings
+- Social features
+- Public profiles
+- Community forums
+- Payment processing
+- Wearable integrations
+- Complicated analytics
+- Marketing landing pages
+- Achievement badges or gamification
+- Native iOS or Android applications
+
+Build the responsive PWA first, with an architecture that can later support a native mobile application.

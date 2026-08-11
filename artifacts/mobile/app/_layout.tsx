@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Platform, TouchableOpacity } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -11,31 +12,54 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import { Stack } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
+import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { JournalProvider } from '@/contexts/JournalContext';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { useColors } from '@/hooks/useColors';
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-function RootLayoutNav() {
+function HeaderRightSettings() {
+  const router = useRouter();
+  const colors = useColors();
   return (
-    <Stack>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <TouchableOpacity
+      onPress={() => router.push('/settings')}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      style={{ marginRight: Platform.OS === 'web' ? 16 : 4, padding: 4 }}
+    >
+      <Feather name="settings" size={20} color={colors.mutedForeground} />
+    </TouchableOpacity>
+  );
+}
+
+function RootLayoutNav() {
+  const colors = useColors();
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.background },
+        headerTintColor: colors.foreground,
+        headerShadowVisible: false,
+        headerBackTitle: '',
+      }}
+    >
       <Stack.Screen
-        name="cycle/[id]"
-        options={{ headerShown: false, animation: 'slide_from_right' }}
-      />
-      <Stack.Screen
-        name="add-cycle"
+        name="(tabs)"
         options={{
-          presentation: 'modal',
-          headerShown: false,
-          animation: 'slide_from_bottom',
+          headerShown: Platform.OS === 'web',
+          title: 'Peptide Tracker',
+          headerRight: () => <HeaderRightSettings />,
         }}
       />
+      <Stack.Screen name="cycle/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="add-cycle" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="settings" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="auth/login" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="auth/register" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
     </Stack>
   );
 }
@@ -62,9 +86,9 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
-              <JournalProvider>
+              <AuthProvider>
                 <RootLayoutNav />
-              </JournalProvider>
+              </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
