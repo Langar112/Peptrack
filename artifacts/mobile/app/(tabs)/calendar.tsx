@@ -107,6 +107,32 @@ export default function CalendarScreen() {
   const [completeNote, setCompleteNote] = useState('');
   const [completeSite, setCompleteSite] = useState('');
   const [cyclesPanel, setCyclesPanel] = useState(false);
+  const [deletingCycleId, setDeletingCycleId] = useState<string | null>(null);
+
+  const handleDeleteCycle = (id: string, name: string) => {
+    Alert.alert(
+      'Delete Cycle',
+      `Permanently delete "${name}" and all its injection records? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            setDeletingCycleId(id);
+            try {
+              await api.cycles.delete(id);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              fetchData();
+            } catch {
+              Alert.alert('Error', 'Failed to delete cycle. Please try again.');
+            } finally {
+              setDeletingCycleId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const fetchData = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -544,12 +570,24 @@ export default function CalendarScreen() {
                       <Text style={{ fontSize: 11, fontFamily: 'Inter_600SemiBold', color: c.status === 'paused' ? colors.warning : colors.success }}>{c.status}</Text>
                     </View>
                   </View>
-                  <TouchableOpacity
-                    onPress={() => { setCyclesPanel(false); router.push({ pathname: '/add-cycle', params: { editId: c.id } }); }}
-                    style={{ padding: 8 }}
-                  >
-                    <Feather name="edit-2" size={16} color={colors.mutedForeground} />
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <TouchableOpacity
+                      onPress={() => { setCyclesPanel(false); router.push({ pathname: '/add-cycle', params: { editId: c.id } }); }}
+                      style={{ padding: 8 }}
+                    >
+                      <Feather name="edit-2" size={16} color={colors.mutedForeground} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteCycle(c.id, name)}
+                      style={{ padding: 8 }}
+                      disabled={deletingCycleId === c.id}
+                    >
+                      {deletingCycleId === c.id
+                        ? <ActivityIndicator size="small" color={colors.destructive} />
+                        : <Feather name="trash-2" size={16} color={colors.destructive} />
+                      }
+                    </TouchableOpacity>
+                  </View>
                 </View>
               );
             })}
