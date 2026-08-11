@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { db, cyclesTable, scheduleRulesTable, injectionEventsTable, journalEntriesTable, cycleChangeHistoryTable, peptideCatalogTable } from "@workspace/db";
 import { requireAuth, AuthRequest } from "../lib/auth.js";
 import { generateInjectionEvents } from "../lib/schedule.js";
@@ -24,8 +24,8 @@ router.get("/", async (req: AuthRequest, res) => {
           .from(scheduleRulesTable)
           .where(
             cycleIds.length === 1
-              ? eq(scheduleRulesTable.cycleId, cycleIds[0])
-              : scheduleRulesTable.cycleId.in(cycleIds)
+              ? eq(scheduleRulesTable.cycleId, cycleIds[0]!)
+              : inArray(scheduleRulesTable.cycleId, cycleIds)
           )
       : [];
 

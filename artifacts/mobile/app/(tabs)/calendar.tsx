@@ -217,33 +217,64 @@ export default function CalendarScreen() {
           <View key={w} style={{ flexDirection: 'row' }}>
             {days.slice(w * 7, w * 7 + 7).map((d) => {
               const dayEvents = eventsOnDay(d);
+              const hasEvents = dayEvents.length > 0;
               const isToday = isSameDay(d, today);
               const isSelected = selectedDate ? isSameDay(d, selectedDate) : false;
               const isCurrentMonth = d.getMonth() === currentDate.getMonth();
+
+              // Determine dominant status colour for the day highlight
+              const hasCompleted = dayEvents.some((e) => e.status === 'completed');
+              const hasMissed = dayEvents.some((e) => e.status === 'missed');
+              const hasScheduled = dayEvents.some((e) => e.status === 'scheduled');
+              const dominantColor = hasCompleted
+                ? colors.success
+                : hasMissed
+                ? colors.destructive
+                : hasScheduled
+                ? colors.primary
+                : colors.mutedForeground;
 
               return (
                 <TouchableOpacity
                   key={d.toISOString()}
                   style={[
                     s.dayCell,
-                    isSelected && { backgroundColor: colors.primary + '18' },
+                    hasEvents && !isSelected && { backgroundColor: dominantColor + '12' },
+                    isSelected && { backgroundColor: colors.primary + '22' },
                     isToday && { borderColor: colors.primary, borderWidth: 1.5 },
                   ]}
                   onPress={() => setSelectedDate(isSelected ? null : d)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[
-                    s.dayNum,
-                    !isCurrentMonth && { color: colors.border },
-                    isToday && { color: colors.primary, fontFamily: 'Inter_700Bold' },
+                  {/* Day number — circled on injection days */}
+                  <View style={[
+                    s.dayNumWrap,
+                    isToday && { backgroundColor: colors.primary },
+                    hasEvents && !isToday && { backgroundColor: dominantColor + '25' },
                   ]}>
-                    {d.getDate()}
-                  </Text>
-                  {dayEvents.slice(0, 3).map((ev) => (
-                    <EventLabel key={ev.id} event={ev} colors={colors} />
-                  ))}
-                  {dayEvents.length > 3 && (
-                    <Text style={{ fontSize: 9, color: colors.mutedForeground }}>+{dayEvents.length - 3} more</Text>
+                    <Text style={[
+                      s.dayNum,
+                      !isCurrentMonth && { color: colors.border },
+                      hasEvents && !isToday && { color: dominantColor, fontFamily: 'Inter_700Bold' },
+                      isToday && { color: colors.primaryForeground, fontFamily: 'Inter_700Bold' },
+                    ]}>
+                      {d.getDate()}
+                    </Text>
+                  </View>
+
+                  {/* Status dots — one per event (max 4) */}
+                  {hasEvents && (
+                    <View style={s.dotRow}>
+                      {dayEvents.slice(0, 4).map((ev) => (
+                        <View
+                          key={ev.id}
+                          style={[s.eventDot, { backgroundColor: statusColor(ev.status, colors) }]}
+                        />
+                      ))}
+                      {dayEvents.length > 4 && (
+                        <Text style={{ fontSize: 8, color: colors.mutedForeground, lineHeight: 8 }}>+{dayEvents.length - 4}</Text>
+                      )}
+                    </View>
                   )}
                 </TouchableOpacity>
               );
@@ -573,8 +604,11 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
     iconBtn: { width: 36, height: 36, borderRadius: 8, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' },
     addBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
     addBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.primaryForeground },
-    dayCell: { flex: 1, minHeight: 70, borderWidth: 0.5, borderColor: colors.border + '40', padding: 4 },
-    dayNum: { fontSize: 13, fontFamily: 'Inter_500Medium', color: colors.foreground, marginBottom: 3 },
+    dayCell: { flex: 1, minHeight: 72, borderWidth: 0.5, borderColor: colors.border + '40', padding: 4, alignItems: 'center' },
+    dayNumWrap: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+    dayNum: { fontSize: 13, fontFamily: 'Inter_500Medium', color: colors.foreground },
+    dotRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 3 },
+    eventDot: { width: 7, height: 7, borderRadius: 3.5 },
     dayDetail: { backgroundColor: colors.card, margin: 12, borderRadius: colors.radius, borderWidth: 1, borderColor: colors.border, padding: 16 },
     dayDetailTitle: { fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 12 },
     emptyDayText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground },
