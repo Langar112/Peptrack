@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { api, type CycleWithRule } from '@/services/api';
+import { cancelCycleNotifications, scheduleCycleNotifications } from '@/services/notifications';
 
 function formatDate(dateStr?: string | null): string {
   if (!dateStr) return 'Ongoing';
@@ -81,10 +82,31 @@ export default function CycleDetailScreen() {
         onPress: async () => {
           setIsActing(true);
           try {
-            if (action === 'pause') await api.cycles.pause(id!);
-            else if (action === 'resume') await api.cycles.resume(id!);
-            else if (action === 'archive') await api.cycles.archive(id!);
-            else await api.cycles.delete(id!);
+            if (action === 'pause') {
+              await api.cycles.pause(id!);
+              await cancelCycleNotifications(id!);
+            } else if (action === 'resume') {
+              await api.cycles.resume(id!);
+              // Reschedule notifications for resumed cycle
+              try {
+                const now = new Date();
+                const monthOut = new Date(now);
+                monthOut.setDate(monthOut.getDate() + 60);
+                const { events } = await api.injectionEvents.list({
+                  cycleId: id!,
+                  from: now.toISOString(),
+                  to: monthOut.toISOString(),
+                });
+                const name = cycle?.cycleName || cycle?.customCompoundName || 'Cycle';
+                await scheduleCycleNotifications(id!, name, events);
+              } catch { /* best-effort */ }
+            } else if (action === 'archive') {
+              await api.cycles.archive(id!);
+              await cancelCycleNotifications(id!);
+            } else {
+              await api.cycles.delete(id!);
+              await cancelCycleNotifications(id!);
+            }
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             if (action === 'delete' || action === 'archive') {
               router.back();

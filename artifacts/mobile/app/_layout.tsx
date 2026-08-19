@@ -17,6 +17,7 @@ import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { requestNotificationPermissions } from '@/services/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -77,6 +78,11 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    // Request notification permission once on startup (no-op on web)
+    requestNotificationPermissions();
+  }, []);
 
   if (!fontsLoaded && !fontError) return null;
 

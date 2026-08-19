@@ -19,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, type InjectionEvent, type CycleWithRule } from '@/services/api';
+import { cancelCycleNotifications } from '@/services/notifications';
 
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -114,6 +115,7 @@ export default function CalendarScreen() {
       setDeletingCycleId(id);
       try {
         await api.cycles.delete(id);
+        await cancelCycleNotifications(id);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         fetchData();
       } catch {

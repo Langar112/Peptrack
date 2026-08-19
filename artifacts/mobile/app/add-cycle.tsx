@@ -19,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { api } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { scheduleCycleNotifications, cancelCycleNotifications } from '@/services/notifications';
 
 const DAY_OPTIONS = [
   { label: 'Mo', value: 'monday' },
@@ -147,10 +148,33 @@ export default function AddCycleScreen() {
         scheduleRule,
       };
 
+      let savedCycleId: string;
+      let savedCycleName: string;
       if (params.editId) {
-        await api.cycles.update(params.editId, payload);
+        const { cycle } = await api.cycles.update(params.editId, payload);
+        savedCycleId = cycle.id;
+        savedCycleName = cycle.cycleName || cycle.customCompoundName || peptideName;
+        // Cancel old notifications before rescheduling below
+        await cancelCycleNotifications(savedCycleId);
       } else {
-        await api.cycles.create(payload);
+        const { cycle } = await api.cycles.create(payload);
+        savedCycleId = cycle.id;
+        savedCycleName = cycle.cycleName || cycle.customCompoundName || peptideName;
+      }
+
+      // Schedule local notifications for upcoming injections (native only)
+      try {
+        const now = new Date();
+        const monthOut = new Date(now);
+        monthOut.setDate(monthOut.getDate() + 60);
+        const { events } = await api.injectionEvents.list({
+          cycleId: savedCycleId,
+          from: now.toISOString(),
+          to: monthOut.toISOString(),
+        });
+        await scheduleCycleNotifications(savedCycleId, savedCycleName, events);
+      } catch {
+        // Non-fatal — notifications are best-effort
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

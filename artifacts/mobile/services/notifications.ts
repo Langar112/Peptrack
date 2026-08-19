@@ -1,0 +1,130 @@
+/**
+ * notifications.ts — Local push notification scheduling for injection reminders.
+ * Native-only (iOS/Android). All functions are no-ops on web.
+ *
+ * iOS limits 64 pending local notifications per app; we schedule at most
+ * MAX_PER_CYCLE upcoming events per cycle to leave room for multiple cycles.
+ */
+
+import { Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Show notifications even when the app is foregrounded
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowList: true,
+  }),
+});
+
+const NOTIF_MAP_KEY = '@peptidetracker/notif_ids';
+const MAX_PER_CYCLE = 20; // stay well under iOS 64 limit
+
+// ─── Permission ───────────────────────────────────────────────────────────────
+
+export async function requestNotificationPermissions(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  const { status: existing } = await Notifications.getPermissionsAsync();
+  if (existing === 'granted') return true;
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === 'granted';
+}
+
+// ─── AsyncStorage map: cycleId → scheduled notification IDs ──────────────────
+
+async function loadMap(): Promise<Record<string, string[]>> {
+  try {
+    const raw = await AsyncStorage.getItem(NOTIF_MAP_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function saveMap(map: Record<string, string[]>): Promise<void> {
+  await AsyncStorage.setItem(NOTIF_MAP_KEY, JSON.stringify(map));
+}
+
+// ─── Scheduling ───────────────────────────────────────────────────────────────
+
+export interface NotifEvent {
+  scheduledAt: string;        // ISO datetime string
+  plannedDose: string;
+  plannedDoseUnit: string;
+  plannedSyringeUnits: string;
+}
+
+/**
+ * Cancel any previously scheduled notifications for this cycle, then schedule
+ * the next MAX_PER_CYCLE future injection events as local notifications.
+ */
+export async function scheduleCycleNotifications(
+  cycleId: string,
+  cycleName: string,
+  events: NotifEvent[],
+): Promise<void> {
+  if (Platform.OS === 'web') return;
+
+  // Always cancel old ones first so we don't double-schedule on updates
+  await cancelCycleNotifications(cycleId);
+
+  const now = new Date();
+  const upcoming = events
+    .filter((e) => new Date(e.scheduledAt) > now)
+    .slice(0, MAX_PER_CYCLE);
+
+  if (upcoming.length === 0) return;
+
+  const ids: string[] = [];
+
+  for (const event of upcoming) {
+    const triggerDate = new Date(event.scheduledAt);
+    const dose = `${event.plannedDose} ${event.plannedDoseUnit}`;
+    const units = parseFloat(event.plannedSyringeUnits).toFixed(1);
+
+    try {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '💉 Injection Time',
+          body: `${cycleName} — ${dose} (${units} units)`,
+          sound: true,
+          data: { cycleId },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: triggerDate,
+        },
+      });
+      ids.push(id);
+    } catch {
+      // Silently skip events that can't be scheduled (e.g. trigger in the past)
+    }
+  }
+
+  if (ids.length > 0) {
+    const map = await loadMap();
+    map[cycleId] = ids;
+    await saveMap(map);
+  }
+}
+
+// ─── Cancellation ─────────────────────────────────────────────────────────────
+
+/**
+ * Cancel all pending local notifications for a cycle (on delete/pause/archive).
+ */
+export async function cancelCycleNotifications(cycleId: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  const map = await loadMap();
+  const ids = map[cycleId] ?? [];
+  await Promise.all(
+    ids.map((id) =>
+      Notifications.cancelScheduledNotificationAsync(id).catch(() => {}),
+    ),
+  );
+  delete map[cycleId];
+  await saveMap(map);
+}
