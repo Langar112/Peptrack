@@ -154,11 +154,7 @@ export default function AddCycleScreen() {
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.back();
-      // Give the calendar a moment to refresh
-      setTimeout(() => {
-        router.push('/(tabs)/calendar');
-      }, 300);
+      router.replace('/(tabs)/');
     } catch (err: any) {
       Alert.alert('Error', err.message ?? 'Failed to save cycle. Please try again.');
     } finally {
