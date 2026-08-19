@@ -199,7 +199,7 @@ export default function AddCycleScreen() {
           {params.editId ? 'Edit Cycle' : 'New Cycle'}
         </Text>
         <TouchableOpacity onPress={() => { const err = validate(); if (err) { Alert.alert('Missing Information', err); } else { setShowSummary(true); } }}>
-          <Text style={[s.saveBtn, { color: colors.primary }]}>Review</Text>
+          <Text style={[s.saveBtn, { color: colors.primary }]}>Save Cycle</Text>
         </TouchableOpacity>
       </View>
 
