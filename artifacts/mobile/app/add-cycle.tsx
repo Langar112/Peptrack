@@ -217,21 +217,20 @@ export default function AddCycleScreen() {
           <TextInput style={s.input} value={peptideName} onChangeText={setPeptideName} placeholder="e.g. BPC-157" placeholderTextColor={colors.mutedForeground} autoCapitalize="words" />
         </View>
 
-        <View style={s.row}>
-          <View style={[s.field, { flex: 1, marginRight: 8 }]}>
-            <Text style={s.label}>Vial Amount</Text>
-            <View style={s.inputRow}>
-              <TextInput style={[s.input, { flex: 1 }]} value={vialAmount} onChangeText={setVialAmount} placeholder="e.g. 5" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
-              <TouchableOpacity style={s.unitPill} onPress={() => setUnitDropdown('vial')}>
-                <Text style={s.unitPillText}>{vialUnit}</Text>
-                <Feather name="chevron-down" size={12} color={colors.primary} style={{ marginLeft: 2 }} />
-              </TouchableOpacity>
-            </View>
+        <View style={s.field}>
+          <Text style={s.label}>Vial Amount</Text>
+          <View style={s.inputRow}>
+            <TextInput style={[s.input, { flex: 1 }]} value={vialAmount} onChangeText={setVialAmount} placeholder="e.g. 5" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
+            <TouchableOpacity style={s.unitPill} onPress={() => setUnitDropdown('vial')}>
+              <Text style={s.unitPillText}>{vialUnit}</Text>
+              <Feather name="chevron-down" size={12} color={colors.primary} style={{ marginLeft: 2 }} />
+            </TouchableOpacity>
           </View>
-          <View style={[s.field, { flex: 1 }]}>
-            <Text style={s.label}>BAC Water (mL)</Text>
-            <TextInput style={s.input} value={bacWater} onChangeText={setBacWater} placeholder="e.g. 2" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
-          </View>
+        </View>
+
+        <View style={s.field}>
+          <Text style={s.label}>BAC Water (mL)</Text>
+          <TextInput style={s.input} value={bacWater} onChangeText={setBacWater} placeholder="e.g. 2" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
         </View>
 
         <View style={s.field}>
