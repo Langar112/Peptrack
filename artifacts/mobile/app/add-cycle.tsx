@@ -92,6 +92,7 @@ export default function AddCycleScreen() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [unitDropdown, setUnitDropdown] = useState<'vial' | 'dose' | null>(null);
 
   // Compute end date for display
   const computedEndDate =
@@ -117,21 +118,6 @@ export default function AddCycleScreen() {
 
   const validate = (): string | null => {
     if (!peptideName.trim()) return 'Enter the peptide or compound name.';
-    if (!vialAmount || isNaN(parseFloat(vialAmount)) || parseFloat(vialAmount) <= 0) return 'Enter a valid vial amount.';
-    if (!bacWater || isNaN(parseFloat(bacWater)) || parseFloat(bacWater) <= 0) return 'Enter a valid BAC water amount.';
-    if (!desiredDose || isNaN(parseFloat(desiredDose)) || parseFloat(desiredDose) <= 0) return 'Enter a valid desired dose.';
-    if (!startDate) return 'Enter a start date.';
-    if ((freqType === 'specific_days' || freqType === 'times_per_week') && selectedDays.length === 0)
-      return 'Select at least one day.';
-    if (freqType === 'times_per_week') {
-      const n = parseInt(timesPerWeek);
-      if (!n || n < 1 || n > 7) return 'Enter a valid number of injections per week (1–7).';
-      if (selectedDays.length !== n) return `Select exactly ${n} day${n > 1 ? 's' : ''} for ${n}x/week.`;
-    }
-    if (freqType === 'every_x_days') {
-      const n = parseInt(intervalDays);
-      if (!n || n < 1) return 'Enter a valid interval (e.g. 2 for every 2 days).';
-    }
     return null;
   };
 
@@ -142,18 +128,19 @@ export default function AddCycleScreen() {
     setIsSaving(true);
     try {
       const scheduleRule = buildScheduleRule();
+      const parseOptional = (v: string) => { const n = parseFloat(v); return isNaN(n) ? undefined : n; };
       const payload = {
         customCompoundName: peptideName.trim(),
         cycleName: cycleName.trim() || undefined,
-        vialAmount: parseFloat(vialAmount),
+        vialAmount: parseOptional(vialAmount),
         vialUnit,
-        bacWaterMl: parseFloat(bacWater),
-        desiredDose: parseFloat(desiredDose),
+        bacWaterMl: parseOptional(bacWater),
+        desiredDose: parseOptional(desiredDose),
         doseUnit,
-        calculatedVolumeMl: parseFloat(calculatedVolumeMl) || 0,
-        calculatedSyringeUnits: parseFloat(calculatedSyringeUnits) || 0,
-        syringeCapacityMl: parseFloat(syringeSize) || 1.0,
-        startDate,
+        calculatedVolumeMl: parseOptional(calculatedVolumeMl) ?? 0,
+        calculatedSyringeUnits: parseOptional(calculatedSyringeUnits) ?? 0,
+        syringeCapacityMl: parseOptional(syringeSize) ?? 1.0,
+        startDate: startDate || undefined,
         endDate: computedEndDate || undefined,
         durationWeeks: computedDurationWeeks || undefined,
         ongoing: durationType === 'ongoing',
@@ -232,34 +219,28 @@ export default function AddCycleScreen() {
 
         <View style={s.row}>
           <View style={[s.field, { flex: 1, marginRight: 8 }]}>
-            <Text style={s.label}>Vial Amount *</Text>
+            <Text style={s.label}>Vial Amount</Text>
             <View style={s.inputRow}>
               <TextInput style={[s.input, { flex: 1 }]} value={vialAmount} onChangeText={setVialAmount} placeholder="e.g. 5" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
-              <TouchableOpacity style={s.unitPill} onPress={() => {
-                const units = ['mg', 'mcg', 'IU'];
-                const next = units[(units.indexOf(vialUnit) + 1) % units.length];
-                setVialUnit(next);
-              }}>
+              <TouchableOpacity style={s.unitPill} onPress={() => setUnitDropdown('vial')}>
                 <Text style={s.unitPillText}>{vialUnit}</Text>
+                <Feather name="chevron-down" size={12} color={colors.primary} style={{ marginLeft: 2 }} />
               </TouchableOpacity>
             </View>
           </View>
           <View style={[s.field, { flex: 1 }]}>
-            <Text style={s.label}>BAC Water (mL) *</Text>
+            <Text style={s.label}>BAC Water (mL)</Text>
             <TextInput style={s.input} value={bacWater} onChangeText={setBacWater} placeholder="e.g. 2" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
           </View>
         </View>
 
         <View style={s.field}>
-          <Text style={s.label}>Desired Dose *</Text>
+          <Text style={s.label}>Desired Dose</Text>
           <View style={s.inputRow}>
             <TextInput style={[s.input, { flex: 1 }]} value={desiredDose} onChangeText={setDesiredDose} placeholder="e.g. 250" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
-            <TouchableOpacity style={s.unitPill} onPress={() => {
-              const units = ['mcg', 'mg', 'IU'];
-              const next = units[(units.indexOf(doseUnit) + 1) % units.length];
-              setDoseUnit(next);
-            }}>
+            <TouchableOpacity style={s.unitPill} onPress={() => setUnitDropdown('dose')}>
               <Text style={s.unitPillText}>{doseUnit}</Text>
+              <Feather name="chevron-down" size={12} color={colors.primary} style={{ marginLeft: 2 }} />
             </TouchableOpacity>
           </View>
         </View>
@@ -284,7 +265,7 @@ export default function AddCycleScreen() {
         </View>
 
         <View style={s.field}>
-          <Text style={s.label}>Start Date *</Text>
+          <Text style={s.label}>Start Date</Text>
           <TextInput style={s.input} value={startDate} onChangeText={setStartDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.mutedForeground} keyboardType="numbers-and-punctuation" />
         </View>
 
@@ -357,7 +338,7 @@ export default function AddCycleScreen() {
           <View style={s.field}>
             {freqType === 'times_per_week' && (
               <>
-                <Text style={s.label}>Injections per week *</Text>
+                <Text style={s.label}>Injections per week</Text>
                 <TextInput
                   style={[s.input, { marginBottom: 12 }]}
                   value={timesPerWeek}
@@ -368,7 +349,7 @@ export default function AddCycleScreen() {
                 />
               </>
             )}
-            <Text style={s.label}>Select days *</Text>
+            <Text style={s.label}>Select days</Text>
             <View style={s.dayRow}>
               {DAY_OPTIONS.map((d) => (
                 <TouchableOpacity
@@ -389,7 +370,7 @@ export default function AddCycleScreen() {
 
         {freqType === 'every_x_days' && (
           <View style={s.field}>
-            <Text style={s.label}>Interval (days) *</Text>
+            <Text style={s.label}>Interval (days)</Text>
             <TextInput
               style={s.input}
               value={intervalDays}
@@ -449,6 +430,35 @@ export default function AddCycleScreen() {
 
         <View style={{ height: Platform.OS === 'web' ? 80 : 60 }} />
       </ScrollView>
+
+      {/* Unit Dropdown Modal */}
+      <Modal visible={unitDropdown !== null} transparent animationType="fade" onRequestClose={() => setUnitDropdown(null)}>
+        <TouchableOpacity style={s.dropdownBackdrop} activeOpacity={1} onPress={() => setUnitDropdown(null)}>
+          <View style={[s.dropdownSheet, { backgroundColor: colors.card }]}>
+            <Text style={[s.dropdownTitle, { color: colors.mutedForeground }]}>
+              {unitDropdown === 'vial' ? 'Vial Unit' : 'Dose Unit'}
+            </Text>
+            {(unitDropdown === 'vial' ? ['mg', 'mcg', 'IU'] : ['mcg', 'mg', 'IU']).map((unit) => {
+              const selected = unitDropdown === 'vial' ? vialUnit === unit : doseUnit === unit;
+              return (
+                <TouchableOpacity
+                  key={unit}
+                  style={[s.dropdownOption, selected && { backgroundColor: colors.primary + '15' }]}
+                  onPress={() => {
+                    if (unitDropdown === 'vial') setVialUnit(unit);
+                    else setDoseUnit(unit);
+                    setUnitDropdown(null);
+                    Haptics.selectionAsync();
+                  }}
+                >
+                  <Text style={[s.dropdownOptionText, { color: selected ? colors.primary : colors.foreground }]}>{unit}</Text>
+                  {selected && <Feather name="check" size={16} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Summary Modal */}
       <Modal visible={showSummary} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowSummary(false)}>
@@ -531,6 +541,12 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
     addTimeBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primary + '18', borderRadius: colors.radius - 4, paddingHorizontal: 12, paddingVertical: 10 },
     saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: colors.radius, paddingVertical: 16, gap: 8, marginTop: 8, minHeight: 52 },
     saveButtonText: { fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.primaryForeground },
+    // Unit dropdown
+    dropdownBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 40 },
+    dropdownSheet: { borderRadius: 14, overflow: 'hidden', width: '100%', maxWidth: 280 },
+    dropdownTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+    dropdownOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16 },
+    dropdownOptionText: { fontSize: 16, fontFamily: 'Inter_500Medium' },
     // Modal
     modal: { flex: 1, paddingTop: 20 },
     modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
