@@ -460,7 +460,7 @@ export default function CalendarScreen() {
             style={[s.iconBtn, { marginLeft: 8 }]}
             onPress={() => setCyclesPanel(true)}
           >
-            <Feather name="layers" size={18} color={colors.foreground} />
+            <CycleIcon size={18} color={colors.foreground} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -567,7 +567,7 @@ export default function CalendarScreen() {
           <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
             {cycles.length === 0 ? (
               <View style={{ alignItems: 'center', paddingTop: 40 }}>
-                <Feather name="layers" size={40} color={colors.border} />
+                <CycleIcon size={40} color={colors.border} />
                 <Text style={[s.subtitle, { marginTop: 12, textAlign: 'center' }]}>No active cycles</Text>
                 <TouchableOpacity style={[s.primaryBtn, { marginTop: 16 }]} onPress={() => { setCyclesPanel(false); router.push('/add-cycle'); }}>
                   <Text style={s.primaryBtnText}>Add Cycle</Text>
