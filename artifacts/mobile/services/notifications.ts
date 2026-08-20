@@ -7,18 +7,37 @@
  */
 
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Show notifications even when the app is foregrounded
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowList: true,
-  }),
-});
+type NotificationsModule = typeof import('expo-notifications');
+let notificationsModule: NotificationsModule | null | undefined;
+
+/**
+ * Expo Go on Android can throw while loading expo-notifications because
+ * remote push notifications are not supported there. Keep notifications
+ * optional so the rest of the app remains usable.
+ */
+async function getNotifications(): Promise<NotificationsModule | null> {
+  if (Platform.OS === 'web') return null;
+  if (notificationsModule !== undefined) return notificationsModule;
+
+  try {
+    const Notifications = await import('expo-notifications');
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowList: true,
+      }),
+    });
+    notificationsModule = Notifications;
+  } catch {
+    notificationsModule = null;
+  }
+
+  return notificationsModule;
+}
 
 const NOTIF_MAP_KEY = '@peptidetracker/notif_ids';
 const MAX_PER_CYCLE = 20; // stay well under iOS 64 limit
@@ -26,7 +45,8 @@ const MAX_PER_CYCLE = 20; // stay well under iOS 64 limit
 // ─── Permission ───────────────────────────────────────────────────────────────
 
 export async function requestNotificationPermissions(): Promise<boolean> {
-  if (Platform.OS === 'web') return false;
+  const Notifications = await getNotifications();
+  if (!Notifications) return false;
   const { status: existing } = await Notifications.getPermissionsAsync();
   if (existing === 'granted') return true;
   const { status } = await Notifications.requestPermissionsAsync();
@@ -66,7 +86,8 @@ export async function scheduleCycleNotifications(
   cycleName: string,
   events: NotifEvent[],
 ): Promise<void> {
-  if (Platform.OS === 'web') return;
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
 
   // Always cancel old ones first so we don't double-schedule on updates
   await cancelCycleNotifications(cycleId);
@@ -117,7 +138,8 @@ export async function scheduleCycleNotifications(
  * Cancel all pending local notifications for a cycle (on delete/pause/archive).
  */
 export async function cancelCycleNotifications(cycleId: string): Promise<void> {
-  if (Platform.OS === 'web') return;
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   const map = await loadMap();
   const ids = map[cycleId] ?? [];
   await Promise.all(
