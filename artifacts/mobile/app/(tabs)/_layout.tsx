@@ -1,11 +1,12 @@
 import React from 'react';
 import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
+import { SyringeIcon } from '@/components/SyringeIcon';
 
 export default function TabLayout() {
   const colors = useColors();
@@ -50,12 +51,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Calculator',
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="cross.vial.fill" tintColor={color} size={24} />
-            ) : (
-              <MaterialCommunityIcons name="needle" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color }) => <SyringeIcon size={23} color={color} />,
         }}
       />
       <Tabs.Screen

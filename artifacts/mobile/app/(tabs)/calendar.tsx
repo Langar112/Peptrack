@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  InteractionManager,
   Modal,
   Platform,
   ScrollView,
@@ -110,6 +111,13 @@ export default function CalendarScreen() {
   const [completeSite, setCompleteSite] = useState('');
   const [cyclesPanel, setCyclesPanel] = useState(false);
   const [deletingCycleId, setDeletingCycleId] = useState<string | null>(null);
+
+  const handleEditCycle = useCallback((id: string) => {
+    setCyclesPanel(false);
+    InteractionManager.runAfterInteractions(() => {
+      router.push({ pathname: '/add-cycle', params: { editId: id } });
+    });
+  }, [router]);
 
   const handleDeleteCycle = (id: string, name: string) => {
     const doDelete = async () => {
@@ -570,7 +578,13 @@ export default function CalendarScreen() {
               const weekNum = Math.floor((today.getTime() - cycleStart.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
               return (
                 <View key={c.id} style={[s.cycleRow, { backgroundColor: colors.card, borderColor: colors.border, borderLeftWidth: 4, borderLeftColor: getCycleColor(c.color) }]}>
-                  <View style={{ flex: 1 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1 }}
+                    onPress={() => handleEditCycle(c.id)}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${name}`}
+                  >
                     <Text style={{ fontSize: 16, fontFamily: 'Inter_600SemiBold', color: colors.foreground }}>{name}</Text>
                     <Text style={{ fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 2 }}>
                       {c.desiredDose} {c.doseUnit} · {c.durationWeeks ? `Week ${weekNum} of ${c.durationWeeks}` : `Week ${Math.max(weekNum, 1)}`}
@@ -578,11 +592,14 @@ export default function CalendarScreen() {
                     <View style={[{ alignSelf: 'flex-start', marginTop: 6, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }, { backgroundColor: c.status === 'paused' ? colors.warning + '20' : colors.success + '20' }]}>
                       <Text style={{ fontSize: 11, fontFamily: 'Inter_600SemiBold', color: c.status === 'paused' ? colors.warning : colors.success }}>{c.status}</Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <TouchableOpacity
-                      onPress={() => { setCyclesPanel(false); router.push({ pathname: '/add-cycle', params: { editId: c.id } }); }}
-                      style={{ padding: 8 }}
+                      onPress={() => handleEditCycle(c.id)}
+                      style={{ padding: 10 }}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${name}`}
                     >
                       <Feather name="edit-2" size={16} color={colors.mutedForeground} />
                     </TouchableOpacity>
