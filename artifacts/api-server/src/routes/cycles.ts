@@ -58,7 +58,23 @@ router.post("/", async (req: AuthRequest, res) => {
       durationWeeks,
       ongoing,
       scheduleRule,
-    } = req.body;
+    } = req.body ?? {};
+
+    const requiredPositiveNumbers = [
+      ["vial amount", vialAmount],
+      ["BAC water amount", bacWaterMl],
+      ["desired dose", desiredDose],
+      ["calculated volume", calculatedVolumeMl],
+      ["calculated syringe units", calculatedSyringeUnits],
+    ] as const;
+
+    for (const [label, value] of requiredPositiveNumbers) {
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue) || numericValue <= 0) {
+        res.status(400).json({ error: `Enter a valid ${label} before saving this cycle.` });
+        return;
+      }
+    }
 
     const [cycle] = await db
       .insert(cyclesTable)

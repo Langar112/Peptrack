@@ -18,7 +18,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColors } from '@/hooks/useColors';
-import { api } from '@/services/api';
+import { api, type CreateCycleInput } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { scheduleCycleNotifications, cancelCycleNotifications } from '@/services/notifications';
 import { DisclaimerModal } from '@/components/DisclaimerModal';
@@ -98,6 +98,7 @@ export default function AddCycleScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [unitDropdown, setUnitDropdown] = useState<'vial' | 'dose' | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
 
@@ -147,29 +148,48 @@ export default function AddCycleScreen() {
 
   const validate = (): string | null => {
     if (!peptideName.trim()) return 'Enter the peptide or compound name.';
+    const requiredNumbers = [
+      { label: 'vial amount', value: vialAmount },
+      { label: 'BAC water amount', value: bacWater },
+      { label: 'desired dose', value: desiredDose },
+      { label: 'calculated volume', value: calculatedVolumeMl },
+      { label: 'calculated syringe units', value: calculatedSyringeUnits },
+    ];
+
+    for (const field of requiredNumbers) {
+      const value = Number.parseFloat(field.value);
+      if (!Number.isFinite(value) || value <= 0) {
+        return `Enter a valid ${field.label} before saving this cycle.`;
+      }
+    }
+
     return null;
   };
 
   const handleSave = async () => {
     const err = validate();
-    if (err) { Alert.alert('Missing Information', err); return; }
+    if (err) {
+      setValidationError(err);
+      Alert.alert('Missing Information', err);
+      return;
+    }
 
+    setValidationError(null);
     setIsSaving(true);
     try {
       const scheduleRule = buildScheduleRule();
-      const parseOptional = (v: string) => { const n = parseFloat(v); return isNaN(n) ? undefined : n; };
-      const payload = {
+      const payload: CreateCycleInput = {
         customCompoundName: peptideName.trim(),
         cycleName: cycleName.trim() || undefined,
-        vialAmount: parseOptional(vialAmount),
+        vialAmount: Number.parseFloat(vialAmount),
         vialUnit,
-        bacWaterMl: parseOptional(bacWater),
-        desiredDose: parseOptional(desiredDose),
+        bacWaterMl: Number.parseFloat(bacWater),
+        desiredDose: Number.parseFloat(desiredDose),
         doseUnit,
-        calculatedVolumeMl: parseOptional(calculatedVolumeMl) ?? 0,
-        calculatedSyringeUnits: parseOptional(calculatedSyringeUnits) ?? 0,
-        syringeCapacityMl: parseOptional(syringeSize) ?? 1.0,
-        startDate: startDate || undefined,
+        calculatedVolumeMl: Number.parseFloat(calculatedVolumeMl),
+        calculatedSyringeUnits: Number.parseFloat(calculatedSyringeUnits),
+        syringeCapacityMl: Number.parseFloat(syringeSize) || 1.0,
+        startDate,
         endDate: computedEndDate || undefined,
         durationWeeks: computedDurationWeeks || undefined,
         ongoing: durationType === 'ongoing',
@@ -252,12 +272,27 @@ export default function AddCycleScreen() {
         </Text>
         <TouchableOpacity onPress={() => {
           const err = validate();
-          if (err) { Alert.alert('Missing Information', err); return; }
+          if (err) {
+            setValidationError(err);
+            Alert.alert('Missing Information', err);
+            return;
+          }
+          setValidationError(null);
           if (!disclaimerAccepted) { setShowDisclaimer(true); } else { setShowSummary(true); }
         }}>
           <Text style={[s.saveBtn, { color: colors.primary }]}>Save Cycle</Text>
         </TouchableOpacity>
       </View>
+
+      {validationError ? (
+        <View
+          accessibilityRole="alert"
+          style={[s.validationError, { backgroundColor: colors.destructive + '16', borderColor: colors.destructive + '45' }]}
+        >
+          <Feather name="alert-circle" size={17} color={colors.destructive} />
+          <Text style={[s.validationErrorText, { color: colors.destructive }]}>{validationError}</Text>
+        </View>
+      ) : null}
 
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
@@ -270,7 +305,7 @@ export default function AddCycleScreen() {
         </View>
 
         <View style={s.field}>
-          <Text style={s.label}>Vial Amount</Text>
+          <Text style={s.label}>Vial Amount *</Text>
           <View style={s.inputRow}>
             <TextInput style={[s.input, { flex: 1 }]} value={vialAmount} onChangeText={setVialAmount} placeholder="e.g. 5" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
             <TouchableOpacity style={s.unitPill} onPress={() => setUnitDropdown('vial')}>
@@ -281,12 +316,12 @@ export default function AddCycleScreen() {
         </View>
 
         <View style={s.field}>
-          <Text style={s.label}>BAC Water (mL)</Text>
+          <Text style={s.label}>BAC Water (mL) *</Text>
           <TextInput style={s.input} value={bacWater} onChangeText={setBacWater} placeholder="e.g. 2" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
         </View>
 
         <View style={s.field}>
-          <Text style={s.label}>Desired Dose</Text>
+          <Text style={s.label}>Desired Dose *</Text>
           <View style={s.inputRow}>
             <TextInput style={[s.input, { flex: 1 }]} value={desiredDose} onChangeText={setDesiredDose} placeholder="e.g. 250" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
             <TouchableOpacity style={s.unitPill} onPress={() => setUnitDropdown('dose')}>
@@ -298,11 +333,11 @@ export default function AddCycleScreen() {
 
         <View style={s.row}>
           <View style={[s.field, { flex: 1, marginRight: 8 }]}>
-            <Text style={s.label}>Volume (mL)</Text>
+            <Text style={s.label}>Volume (mL) *</Text>
             <TextInput style={s.input} value={calculatedVolumeMl} onChangeText={setCalculatedVolumeMl} placeholder="Auto" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
           </View>
           <View style={[s.field, { flex: 1 }]}>
-            <Text style={s.label}>Syringe Units</Text>
+            <Text style={s.label}>Syringe Units *</Text>
             <TextInput style={s.input} value={calculatedSyringeUnits} onChangeText={setCalculatedSyringeUnits} placeholder="Auto" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
           </View>
         </View>
@@ -594,6 +629,8 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+    validationError: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 20, marginTop: 12, padding: 12, borderRadius: colors.radius - 4, borderWidth: 1 },
+    validationErrorText: { flex: 1, fontSize: 13, fontFamily: 'Inter_500Medium', lineHeight: 18 },
     cancelBtn: { fontSize: 16, fontFamily: 'Inter_400Regular' },
     headerTitle: { fontSize: 17, fontFamily: 'Inter_700Bold' },
     saveBtn: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
