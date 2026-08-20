@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,10 +16,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColors } from '@/hooks/useColors';
 import { api } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { scheduleCycleNotifications, cancelCycleNotifications } from '@/services/notifications';
+import { DisclaimerModal } from '@/components/DisclaimerModal';
+
+const disclaimerKey = (userId: string) => `@peptidepro:disclaimer_accepted:${userId}`;
 
 const DAY_OPTIONS = [
   { label: 'Mo', value: 'monday' },
@@ -94,6 +98,30 @@ export default function AddCycleScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [unitDropdown, setUnitDropdown] = useState<'vial' | 'dose' | null>(null);
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
+
+  // Ref always holds the authoritative current user ID so async callbacks
+  // can read it after awaiting — closure-captured values go stale across account switches.
+  const currentUserIdRef = useRef<string | undefined>(user?.id ?? undefined);
+  useEffect(() => { currentUserIdRef.current = user?.id ?? undefined; }, [user?.id]);
+
+  // Load persisted disclaimer acceptance keyed by user ID.
+  // On every user change: reset acceptance AND dismiss any open disclaimer/summary
+  // so a different account cannot reuse the previous session's modal state.
+  useEffect(() => {
+    setDisclaimerAccepted(false);
+    setShowDisclaimer(false);
+    setShowSummary(false);
+    if (!user?.id) return;
+
+    let active = true;
+    AsyncStorage.getItem(disclaimerKey(user.id))
+      .then((val) => { if (active && val === 'true') setDisclaimerAccepted(true); })
+      .catch(() => { /* storage unavailable — disclaimer will show */ });
+
+    return () => { active = false; };
+  }, [user?.id]);
 
   // Compute end date for display
   const computedEndDate =
@@ -222,7 +250,11 @@ export default function AddCycleScreen() {
         <Text style={[s.headerTitle, { color: colors.foreground }]}>
           {params.editId ? 'Edit Cycle' : 'New Cycle'}
         </Text>
-        <TouchableOpacity onPress={() => { const err = validate(); if (err) { Alert.alert('Missing Information', err); } else { setShowSummary(true); } }}>
+        <TouchableOpacity onPress={() => {
+          const err = validate();
+          if (err) { Alert.alert('Missing Information', err); return; }
+          if (!disclaimerAccepted) { setShowDisclaimer(true); } else { setShowSummary(true); }
+        }}>
           <Text style={[s.saveBtn, { color: colors.primary }]}>Save Cycle</Text>
         </TouchableOpacity>
       </View>
@@ -433,7 +465,11 @@ export default function AddCycleScreen() {
         {/* Save button */}
         <TouchableOpacity
           style={[s.saveButton, { backgroundColor: colors.primary }, isSaving && { opacity: 0.7 }]}
-          onPress={handleSave}
+          onPress={() => {
+            const err = validate();
+            if (err) { Alert.alert('Missing Information', err); return; }
+            if (!disclaimerAccepted) { setShowDisclaimer(true); } else { setShowSummary(true); }
+          }}
           disabled={isSaving}
           activeOpacity={0.8}
         >
@@ -521,6 +557,35 @@ export default function AddCycleScreen() {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Safety Disclaimer Modal — shown once per user on first save */}
+      <DisclaimerModal
+        visible={showDisclaimer}
+        onAccept={async () => {
+          // Capture the user ID at the moment the button is pressed
+          const acceptingUserId = user?.id;
+          if (acceptingUserId) {
+            try {
+              await AsyncStorage.setItem(disclaimerKey(acceptingUserId), 'true');
+            } catch {
+              Alert.alert(
+                'Could Not Save Acceptance',
+                'Your acceptance could not be stored. Please try again.',
+              );
+              return; // keep user at the disclaimer until persistence succeeds
+            }
+          }
+          // After the async write, read the ref (not the stale closure) to check
+          // whether the active account changed while we were awaiting the write.
+          if (currentUserIdRef.current !== acceptingUserId) return;
+          setDisclaimerAccepted(true);
+          setShowDisclaimer(false);
+          setShowSummary(true);
+        }}
+        onDecline={() => {
+          setShowDisclaimer(false);
+        }}
+      />
     </View>
   );
 }
