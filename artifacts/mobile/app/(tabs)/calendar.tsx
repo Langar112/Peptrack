@@ -22,7 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { api, type InjectionEvent, type CycleWithRule } from '@/services/api';
 import { cancelCycleNotifications } from '@/services/notifications';
 import { getCycleColor } from '@/constants/colors';
-import { CycleIcon } from '@/components/TabIcons';
+import { CycleIcon, TrashIcon } from '@/components/TabIcons';
 
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -613,10 +613,13 @@ export default function CalendarScreen() {
                       onPress={() => handleDeleteCycle(c.id, name)}
                       style={{ padding: 8 }}
                       disabled={deletingCycleId === c.id}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${name}`}
                     >
                       {deletingCycleId === c.id
                         ? <ActivityIndicator size="small" color={colors.destructive} />
-                        : <Feather name="trash-2" size={16} color={colors.destructive} />
+                        : <TrashIcon size={18} color={colors.destructive} />
                       }
                     </TouchableOpacity>
                   </View>

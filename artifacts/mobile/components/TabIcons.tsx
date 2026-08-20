@@ -80,3 +80,14 @@ export function CycleIcon({ size = 20, color }: TabIconProps) {
     </Svg>
   );
 }
+
+export function TrashIcon({ size = 20, color }: TabIconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M5.5 7.5h13l-.8 12.2a1.5 1.5 0 0 1-1.5 1.3H7.8a1.5 1.5 0 0 1-1.5-1.3L5.5 7.5Z" stroke={color} strokeWidth="1.8" strokeLinejoin="round" />
+      <Path d="M4 7.5h16M9 4h6l1 3.5H8L9 4Z" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <Line x1="10" y1="11" x2="10" y2="17" stroke={color} strokeWidth="1.6" strokeLinecap="round" />
+      <Line x1="14" y1="11" x2="14" y2="17" stroke={color} strokeWidth="1.6" strokeLinecap="round" />
+    </Svg>
+  );
+}
