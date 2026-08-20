@@ -1,0 +1,1 @@
+- [Metro image-size compatibility](metro-image-size-compat.md) — Expo SDK 54’s Metro needs a worker-level path adapter when image-size 2 is forced workspace-wide.
