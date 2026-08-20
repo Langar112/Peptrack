@@ -17,6 +17,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
+import { calculateDosage, type DosageResult } from '@/services/dosageCalc';
 
 // ─── Catalog ────────────────────────────────────────────────────────────────
 const PEPTIDES = [
@@ -28,31 +29,10 @@ const PEPTIDES = [
 
 const VIAL_UNITS = ['mg', 'mcg', 'IU'];
 const DOSE_UNITS = ['mcg', 'mg', 'IU'];
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-interface CalcResult {
-  syringeUnits: number;   // units on selected syringe
-  volumeMl: number;
-  concentration: number;
-  concentrationUnit: string;
-  amountPerUnit: number;
-  dosesPerVial: number;
-  warnings: string[];
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmt(n: number, dec = 2): string {
   const s = n.toFixed(dec);
   return s.replace(/\.?0+$/, '');
 }
-
-function toMcg(amount: number, unit: string): number | null {
-  if (unit === 'mcg') return amount;
-  if (unit === 'mg') return amount * 1000;
-  return null; // IU cannot be converted
-}
-
-// ─── Syringe Diagram ─────────────────────────────────────────────────────────
 function SyringeDiagram({ units, max, colors }: { units: number; max: 50 | 100; colors: any }) {
   const pct = Math.min(Math.max(units / max, 0), 1);
   const ticks = max === 100 ? [0, 20, 40, 60, 80, 100] : [0, 10, 20, 30, 40, 50];
@@ -133,90 +113,33 @@ export default function CalculatorScreen() {
   const [doseUnitModal, setDoseUnitModal] = useState(false);
 
   // Result state
-  const [result, setResult] = useState<CalcResult | null>(null);
+  const [result, setResult] = useState<DosageResult | null>(null);
   const [error, setError] = useState('');
 
   const calculate = useCallback(() => {
     setError('');
     setResult(null);
 
-    const vial = parseFloat(vialAmount);
-    const water = parseFloat(bacWater);
-    const dose = parseFloat(desiredDose);
+    const calculation = calculateDosage({
+      vialAmount: parseFloat(vialAmount),
+      vialUnit,
+      bacWaterMl: parseFloat(bacWater),
+      desiredDose: parseFloat(desiredDose),
+      doseUnit,
+      syringeCapacity: syringeSize,
+    });
 
-    if (!vialAmount || isNaN(vial) || vial <= 0) { setError('Enter a valid vial amount.'); return; }
-    if (!bacWater || isNaN(water) || water <= 0) { setError('Enter a valid BAC water amount.'); return; }
-    if (!desiredDose || isNaN(dose) || dose <= 0) { setError('Enter a valid desired dose.'); return; }
-    if (peptide === 'Custom' && !customName.trim()) { setError('Enter the compound name.'); return; }
-
-    // Unit compatibility check
-    const vialIsIU = vialUnit === 'IU';
-    const doseIsIU = doseUnit === 'IU';
-    if (vialIsIU !== doseIsIU) {
-      setError('Vial and dose units are incompatible. Both must use IU, or both must use mg/mcg.');
+    if (!calculation.ok) {
+      setError(calculation.message);
       return;
     }
 
-    let concentration: number;
-    let volumeMl: number;
-    let concUnit: string;
-    let amountPerUnit: number;
-
-    if (vialIsIU && doseIsIU) {
-      // IU path
-      concentration = vial / water;  // IU/mL
-      volumeMl = dose / concentration;
-      concUnit = 'IU/mL';
-      amountPerUnit = concentration / 100;  // IU per syringe unit
-    } else {
-      // mg/mcg path — normalize to mcg
-      const vialMcg = toMcg(vial, vialUnit)!;
-      const doseMcg = toMcg(dose, doseUnit)!;
-
-      concentration = vialMcg / water;      // mcg/mL
-      volumeMl = doseMcg / concentration;
-      concUnit = 'mcg/mL';
-      amountPerUnit = concentration / 100;  // mcg per syringe unit
-    }
-
-    if (isNaN(volumeMl) || !isFinite(volumeMl)) {
-      setError('Calculation resulted in an invalid number. Check your inputs.');
+    if (peptide === 'Custom' && !customName.trim()) {
+      setError('Enter the compound name.');
       return;
     }
 
-    // Check dose doesn't exceed vial
-    let exceedsVial = false;
-    if (vialIsIU) {
-      exceedsVial = parseFloat(desiredDose) > vial;
-    } else {
-      const doseMcg = toMcg(dose, doseUnit)!;
-      const vialMcg = toMcg(vial, vialUnit)!;
-      exceedsVial = doseMcg > vialMcg;
-    }
-    if (exceedsVial) {
-      setError('Desired dose exceeds the total amount in the vial.');
-      return;
-    }
-
-    const syringeUnits = volumeMl * 100;
-    const dosesPerVial = vialIsIU
-      ? vial / parseFloat(desiredDose)
-      : toMcg(vial, vialUnit)! / toMcg(dose, doseUnit)!;
-
-    const warnings: string[] = [];
-    if (syringeUnits > syringeSize) {
-      warnings.push(`This volume (${fmt(syringeUnits, 1)} units) exceeds the selected ${syringeSize}-unit syringe capacity.`);
-    }
-    if (syringeUnits < 1) {
-      warnings.push('This amount is below 1 syringe unit and may be difficult to measure accurately.');
-    } else if (syringeUnits < 2) {
-      warnings.push('This small amount may be difficult to measure accurately using the selected syringe.');
-    }
-    if (dosesPerVial < 1) {
-      warnings.push('The desired dose exceeds what one vial can provide in a single injection.');
-    }
-
-    setResult({ syringeUnits, volumeMl, concentration, concentrationUnit: concUnit, amountPerUnit, dosesPerVial, warnings });
+    setResult(calculation.result);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [vialAmount, vialUnit, bacWater, desiredDose, doseUnit, peptide, customName, syringeSize]);
 
