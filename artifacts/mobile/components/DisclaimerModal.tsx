@@ -62,7 +62,7 @@ export function DisclaimerModal({ visible, onAccept, onDecline, readOnly = false
         <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
           <Text style={[s.bodyHeading, { color: colors.foreground }]}>For Research & Educational Use Only</Text>
           <Text style={[s.body, { color: colors.mutedForeground }]}>
-            PeptidePro is designed as a research and educational tool to help users track
+            PepTrack is designed as a research and educational tool to help users track
             and log information about peptide compounds. It is{' '}
             <Text style={{ fontFamily: 'Inter_700Bold', color: colors.foreground }}>
               not a medical application
@@ -86,7 +86,7 @@ export function DisclaimerModal({ visible, onAccept, onDecline, readOnly = false
 
           <Text style={[s.bodyHeading, { color: colors.foreground }]}>Limitation of Liability</Text>
           <Text style={[s.body, { color: colors.mutedForeground }]}>
-            The developers of PeptidePro accept no liability for any harm, adverse
+            The developers of PepTrack accept no liability for any harm, adverse
             effects, or legal consequences arising from the use of information logged in
             this app. You use this application entirely at your own risk.
           </Text>

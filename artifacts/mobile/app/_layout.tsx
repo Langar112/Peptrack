@@ -52,7 +52,7 @@ function RootLayoutNav() {
         name="(tabs)"
         options={{
           headerShown: Platform.OS === 'web',
-          title: 'Peptide Tracker',
+          title: 'PepTrack',
           headerRight: () => <HeaderRightSettings />,
         }}
       />
