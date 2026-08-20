@@ -7,6 +7,8 @@ import { generateInjectionEvents } from "../lib/schedule.js";
 const router = Router();
 router.use(requireAuth as any);
 
+const VALID_CYCLE_COLORS = new Set(["teal", "violet", "rose", "amber", "emerald", "blue"]);
+
 type CycleAuditChange = {
   field: string;
   label: string;
@@ -139,6 +141,7 @@ router.post("/", async (req: AuthRequest, res) => {
       peptideCatalogId,
       customCompoundName,
       cycleName,
+      color,
       vialAmount,
       vialUnit,
       bacWaterMl,
@@ -168,6 +171,10 @@ router.post("/", async (req: AuthRequest, res) => {
     const scheduleError = validateScheduleRule(scheduleRule);
     if (scheduleError) {
       res.status(400).json({ error: scheduleError });
+      return;
+    }
+    if (color !== undefined && !VALID_CYCLE_COLORS.has(String(color))) {
+      res.status(400).json({ error: "Choose a valid cycle color." });
       return;
     }
 
@@ -200,6 +207,7 @@ router.post("/", async (req: AuthRequest, res) => {
         peptideCatalogId: peptideCatalogId ?? null,
         customCompoundName: customCompoundName ?? null,
         cycleName: cycleName ?? null,
+        color: color ?? "teal",
         vialAmount: String(vialAmountNumber),
         vialUnit: vialUnit ?? "mg",
         bacWaterMl: String(bacWaterMlNumber),
@@ -326,7 +334,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
       "cycleName", "vialAmount", "vialUnit", "bacWaterMl", "desiredDose",
       "doseUnit", "calculatedVolumeMl", "calculatedSyringeUnits", "syringeCapacityMl",
       "startDate", "endDate", "durationWeeks", "ongoing", "status", "peptideCatalogId",
-      "customCompoundName",
+      "customCompoundName", "color",
     ];
     const labels: Record<string, string> = {
       cycleName: "Cycle name",
@@ -345,11 +353,16 @@ router.patch("/:id", async (req: AuthRequest, res) => {
       status: "Status",
       peptideCatalogId: "Catalog compound",
       customCompoundName: "Compound",
+      color: "Color",
     };
     const numericFields = new Set([
       "vialAmount", "bacWaterMl", "desiredDose", "calculatedVolumeMl",
       "calculatedSyringeUnits", "syringeCapacityMl", "durationWeeks",
     ]);
+    if (cycleFields.color !== undefined && !VALID_CYCLE_COLORS.has(String(cycleFields.color))) {
+      res.status(400).json({ error: "Choose a valid cycle color." });
+      return;
+    }
     for (const field of allowedFields) {
       if (cycleFields[field] === undefined) continue;
       const nextValue = typeof cycleFields[field] === "number"

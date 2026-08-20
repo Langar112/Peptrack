@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { api, type CycleWithRule } from '@/services/api';
 import { cancelCycleNotifications, scheduleCycleNotifications } from '@/services/notifications';
+import { getCycleColor } from '@/constants/colors';
 
 function formatDate(dateStr?: string | null): string {
   if (!dateStr) return 'Ongoing';
@@ -146,6 +147,7 @@ export default function CycleDetailScreen() {
 
   const name = cycle.cycleName || cycle.customCompoundName || 'Cycle';
   const currentWeek = cycle.status === 'active' ? weekOfCycle(cycle.startDate) : null;
+  const cycleColor = getCycleColor(cycle.color);
 
   return (
     <View style={[s.container, { paddingTop: topPad }]}>
@@ -165,7 +167,7 @@ export default function CycleDetailScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
         {/* Hero */}
-        <View style={s.hero}>
+        <View style={[s.hero, { borderTopColor: cycleColor }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <View style={[s.statusBadge, { backgroundColor: statusColor(cycle.status, colors) + '20' }]}>
               <View style={[s.statusDot, { backgroundColor: statusColor(cycle.status, colors) }]} />
@@ -174,8 +176,8 @@ export default function CycleDetailScreen() {
               </Text>
             </View>
             {currentWeek && (
-              <View style={[s.statusBadge, { backgroundColor: colors.primary + '18' }]}>
-                <Text style={[s.statusText, { color: colors.primary }]}>Week {currentWeek}{cycle.durationWeeks ? ` of ${cycle.durationWeeks}` : ''}</Text>
+              <View style={[s.statusBadge, { backgroundColor: cycleColor + '18' }]}>
+                <Text style={[s.statusText, { color: cycleColor }]}>Week {currentWeek}{cycle.durationWeeks ? ` of ${cycle.durationWeeks}` : ''}</Text>
               </View>
             )}
           </View>
@@ -258,7 +260,7 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
     container: { flex: 1, backgroundColor: colors.background },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
     headerTitle: { fontSize: 17, fontFamily: 'Inter_700Bold', color: colors.foreground, flex: 1, textAlign: 'center', marginHorizontal: 12 },
-    hero: { padding: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
+    hero: { padding: 24, borderBottomWidth: 1, borderBottomColor: colors.border, borderTopWidth: 4 },
     statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
     statusDot: { width: 6, height: 6, borderRadius: 3 },
     statusText: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },

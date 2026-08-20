@@ -22,6 +22,7 @@ import { api, type CreateCycleInput } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { scheduleCycleNotifications, cancelCycleNotifications } from '@/services/notifications';
 import { DisclaimerModal } from '@/components/DisclaimerModal';
+import { CYCLE_COLORS, CYCLE_COLOR_FOREGROUND, type CycleColor } from '@/constants/colors';
 
 const disclaimerKey = (userId: string) => `@peptidepro:disclaimer_accepted:${userId}`;
 
@@ -83,6 +84,7 @@ export default function AddCycleScreen() {
 
   // Cycle info
   const [cycleName, setCycleName] = useState('');
+  const [cycleColor, setCycleColor] = useState<CycleColor>('teal');
   const [startDate, setStartDate] = useState(todayISO());
   const [durationType, setDurationType] = useState<'weeks' | 'date' | 'ongoing'>('weeks');
   const [durationWeeks, setDurationWeeks] = useState('8');
@@ -147,6 +149,9 @@ export default function AddCycleScreen() {
         setCalculatedSyringeUnits(optionalInput(cycle.calculatedSyringeUnits));
         setSyringeSize(cycle.syringeCapacityMl);
         setCycleName(cycle.cycleName ?? '');
+        if (CYCLE_COLORS.some((option) => option.value === cycle.color)) {
+          setCycleColor(cycle.color as CycleColor);
+        }
         setStartDate(cycle.startDate);
 
         if (cycle.ongoing) {
@@ -276,6 +281,7 @@ export default function AddCycleScreen() {
       const payload: CreateCycleInput = {
         customCompoundName: peptideName.trim(),
         cycleName: params.editId ? cycleName.trim() || null : cycleName.trim() || undefined,
+        color: cycleColor,
         vialAmount: optionalNumber(vialAmount),
         vialUnit,
         bacWaterMl: optionalNumber(bacWater),
@@ -451,6 +457,30 @@ export default function AddCycleScreen() {
         <View style={s.field}>
           <Text style={s.label}>Cycle Name (optional)</Text>
           <TextInput style={s.input} value={cycleName} onChangeText={setCycleName} placeholder="e.g. Spring Protocol" placeholderTextColor={colors.mutedForeground} />
+        </View>
+
+        <View style={s.field}>
+          <Text style={s.label}>Cycle Color</Text>
+          <View style={s.colorOptions}>
+            {CYCLE_COLORS.map((option) => {
+              const isSelected = cycleColor === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isSelected }}
+                  accessibilityLabel={`${option.label} cycle color`}
+                  onPress={() => { setCycleColor(option.value); Haptics.selectionAsync(); }}
+                  style={[s.colorOption, isSelected && { borderColor: option.color, backgroundColor: option.color + '14' }]}
+                >
+                  <View style={[s.colorSwatch, { backgroundColor: option.color }, isSelected && s.colorSwatchSelected]}>
+                    {isSelected ? <Feather name="check" size={13} color={CYCLE_COLOR_FOREGROUND} /> : null}
+                  </View>
+                  <Text style={[s.colorOptionText, isSelected && { color: colors.foreground }]}>{option.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
         <View style={s.field}>
@@ -746,6 +776,11 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
     scrollContent: { paddingHorizontal: 20, paddingTop: 20 },
     sectionHeader: { fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 14, marginTop: 8, letterSpacing: -0.3 },
     field: { marginBottom: 16 },
+    colorOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    colorOption: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: 9, paddingVertical: 7, backgroundColor: colors.card },
+    colorSwatch: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+    colorSwatchSelected: { borderWidth: 1, borderColor: colors.primaryForeground },
+    colorOptionText: { fontSize: 12, fontFamily: 'Inter_500Medium', color: colors.mutedForeground },
     label: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
     helper: { fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 6 },
     input: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: colors.radius, paddingHorizontal: 16, paddingVertical: 13, fontSize: 15, fontFamily: 'Inter_400Regular', color: colors.foreground },

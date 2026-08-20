@@ -32,6 +32,7 @@ router.get("/", async (req: AuthRequest, res) => {
         event: injectionEventsTable,
         cycleName: cyclesTable.cycleName,
         customCompoundName: cyclesTable.customCompoundName,
+        cycleColor: cyclesTable.color,
         peptideCatalogId: cyclesTable.peptideCatalogId,
         cycleStartDate: cyclesTable.startDate,
       })
@@ -59,7 +60,7 @@ router.get("/", async (req: AuthRequest, res) => {
       }
     }
 
-    res.json({ events: events.map((e) => ({ ...e.event, cycleName: e.cycleName, customCompoundName: e.customCompoundName, cycleStartDate: e.cycleStartDate })) });
+    res.json({ events: events.map((e) => ({ ...e.event, cycleName: e.cycleName, customCompoundName: e.customCompoundName, cycleColor: e.cycleColor, cycleStartDate: e.cycleStartDate })) });
   } catch (err) {
     console.error("List injection events error:", err);
     res.status(500).json({ error: "Failed to fetch events" });

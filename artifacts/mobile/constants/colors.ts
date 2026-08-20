@@ -54,4 +54,21 @@ const colors = {
   radius: 14,
 };
 
+export const CYCLE_COLORS = [
+  { value: 'teal', label: 'Teal', color: '#00B4D8' },
+  { value: 'violet', label: 'Violet', color: '#8B5CF6' },
+  { value: 'rose', label: 'Rose', color: '#F43F5E' },
+  { value: 'amber', label: 'Amber', color: '#F59E0B' },
+  { value: 'emerald', label: 'Emerald', color: '#10B981' },
+  { value: 'blue', label: 'Blue', color: '#3B82F6' },
+] as const;
+
+export const CYCLE_COLOR_FOREGROUND = '#FFFFFF';
+
+export type CycleColor = typeof CYCLE_COLORS[number]['value'];
+
+export function getCycleColor(value?: string | null): string {
+  return CYCLE_COLORS.find((option) => option.value === value)?.color ?? CYCLE_COLORS[0].color;
+}
+
 export default colors;

@@ -33,6 +33,7 @@ router.get("/", async (req: AuthRequest, res) => {
         entry: journalEntriesTable,
         cycleName: cyclesTable.cycleName,
         customCompoundName: cyclesTable.customCompoundName,
+        cycleColor: cyclesTable.color,
       })
       .from(journalEntriesTable)
       .leftJoin(cyclesTable, eq(journalEntriesTable.cycleId, cyclesTable.id))
@@ -44,6 +45,7 @@ router.get("/", async (req: AuthRequest, res) => {
         ...e.entry,
         cycleName: e.cycleName,
         customCompoundName: e.customCompoundName,
+        cycleColor: e.cycleColor,
       })),
     });
   } catch (err) {

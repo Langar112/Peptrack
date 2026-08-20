@@ -187,6 +187,7 @@ export interface CycleWithRule {
   catalogName?: string | null;
   customCompoundName: string | null;
   cycleName: string | null;
+  color: string;
   vialAmount: string;
   vialUnit: string;
   bacWaterMl: string;
@@ -226,6 +227,7 @@ export interface InjectionEvent {
   updatedAt: string;
   cycleName?: string | null;
   customCompoundName?: string | null;
+  cycleColor?: string | null;
   cycleStartDate?: string;
 }
 
@@ -248,12 +250,14 @@ export interface JournalEntry {
   updatedAt: string;
   cycleName?: string | null;
   customCompoundName?: string | null;
+  cycleColor?: string | null;
 }
 
 export interface CreateCycleInput {
   peptideCatalogId?: string;
   customCompoundName?: string;
   cycleName?: string | null;
+  color?: string;
   vialAmount: number;
   vialUnit: string;
   bacWaterMl: number;

@@ -10,6 +10,7 @@ export const cyclesTable = pgTable("cycles", {
   peptideCatalogId: uuid("peptide_catalog_id").references(() => peptideCatalogTable.id, { onDelete: "set null" }),
   customCompoundName: text("custom_compound_name"),
   cycleName: text("cycle_name"),
+  color: text("color").notNull().default("teal"),
   vialAmount: numeric("vial_amount", { precision: 10, scale: 4 }).notNull(),
   vialUnit: text("vial_unit").notNull(), // mg | mcg | IU
   bacWaterMl: numeric("bac_water_ml", { precision: 10, scale: 4 }).notNull(),

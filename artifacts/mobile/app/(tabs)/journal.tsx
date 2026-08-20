@@ -19,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, type JournalEntry, type CycleWithRule } from '@/services/api';
+import { getCycleColor } from '@/constants/colors';
 
 const ENTRY_TYPES = [
   { value: 'general_note', label: 'General Note', icon: 'file-text' },
@@ -231,7 +232,7 @@ export default function JournalScreen() {
             const cycleLabel = item.cycleName || item.customCompoundName;
             const color = entryColor(item.entryType, colors);
             return (
-              <View style={[s.entryCard, { borderLeftColor: color }]}>
+              <View style={[s.entryCard, { borderLeftColor: cycleLabel ? getCycleColor(item.cycleColor) : color }]}>
                 <View style={s.entryTop}>
                   <View style={s.entryMeta}>
                     <View style={[s.typeBadge, { backgroundColor: color + '20' }]}>

@@ -20,6 +20,7 @@ import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, type InjectionEvent, type CycleWithRule } from '@/services/api';
 import { cancelCycleNotifications } from '@/services/notifications';
+import { getCycleColor } from '@/constants/colors';
 
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -68,9 +69,9 @@ function statusColor(status: string, colors: any) {
   }
 }
 
-function StatusDot({ status, colors }: { status: string; colors: any }) {
+function CycleDot({ color }: { color?: string | null }) {
   return (
-    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor(status, colors), marginRight: 4 }} />
+    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: getCycleColor(color), marginRight: 4 }} />
   );
 }
 
@@ -78,7 +79,7 @@ function EventLabel({ event, colors }: { event: InjectionEvent; colors: any }) {
   const name = event.cycleName || event.customCompoundName || 'Unknown';
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-      <StatusDot status={event.status} colors={colors} />
+      <CycleDot color={event.cycleColor} />
       <Text numberOfLines={1} style={{ fontSize: 10, fontFamily: 'Inter_500Medium', color: colors.foreground, flex: 1 }}>
         {name} {event.plannedDose}{event.plannedDoseUnit}
       </Text>
@@ -302,7 +303,7 @@ export default function CalendarScreen() {
                       {dayEvents.slice(0, 4).map((ev) => (
                         <View
                           key={ev.id}
-                          style={[s.eventDot, { backgroundColor: statusColor(ev.status, colors) }]}
+                          style={[s.eventDot, { backgroundColor: getCycleColor(ev.cycleColor) }]}
                         />
                       ))}
                       {dayEvents.length > 4 && (
@@ -473,7 +474,7 @@ export default function CalendarScreen() {
       <Modal visible={eventModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEventModal(false)}>
         {selectedEvent && (
           <View style={[s.modal, { backgroundColor: colors.background }]}>
-            <View style={s.modalHeader}>
+            <View style={[s.modalHeader, { borderTopWidth: 4, borderTopColor: getCycleColor(selectedEvent.cycleColor) }]}>
               <Text style={s.modalTitle}>Injection Details</Text>
               <TouchableOpacity onPress={() => { setEventModal(false); setCompleteNote(''); setCompleteSite(''); }}>
                 <Feather name="x" size={22} color={colors.foreground} />
@@ -568,7 +569,7 @@ export default function CalendarScreen() {
               const cycleStart = new Date(c.startDate + 'T00:00:00');
               const weekNum = Math.floor((today.getTime() - cycleStart.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
               return (
-                <View key={c.id} style={[s.cycleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View key={c.id} style={[s.cycleRow, { backgroundColor: colors.card, borderColor: colors.border, borderLeftWidth: 4, borderLeftColor: getCycleColor(c.color) }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 16, fontFamily: 'Inter_600SemiBold', color: colors.foreground }}>{name}</Text>
                     <Text style={{ fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 2 }}>
@@ -617,19 +618,20 @@ function InfoRow({ label, value, colors, valueColor }: { label: string; value: s
 
 function EventDetailRow({ event, colors, compact = false }: { event: InjectionEvent; colors: any; compact?: boolean }) {
   const name = event.cycleName || event.customCompoundName || 'Unknown';
-  const c = statusColor(event.status, colors);
+  const cycleColor = getCycleColor(event.cycleColor);
+  const status = statusColor(event.status, colors);
   const t = event.scheduledAt.includes('T00:00:00') ? null : new Date(event.scheduledAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-      <View style={{ width: 3, borderRadius: 2, backgroundColor: c, alignSelf: 'stretch', minHeight: 32 }} />
+      <View style={{ width: 3, borderRadius: 2, backgroundColor: cycleColor, alignSelf: 'stretch', minHeight: 32 }} />
       <View style={{ flex: 1 }}>
         <Text style={{ fontSize: compact ? 13 : 15, fontFamily: 'Inter_600SemiBold', color: colors.foreground }}>{name}</Text>
         <Text style={{ fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.mutedForeground }}>
           {event.plannedDose} {event.plannedDoseUnit} · {parseFloat(event.plannedSyringeUnits).toFixed(1)}u{t ? ` · ${t}` : ''}
         </Text>
         {!compact && (
-          <View style={{ alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, backgroundColor: c + '20' }}>
-            <Text style={{ fontSize: 11, fontFamily: 'Inter_600SemiBold', color: c }}>{event.status}</Text>
+          <View style={{ alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, backgroundColor: status + '20' }}>
+            <Text style={{ fontSize: 11, fontFamily: 'Inter_600SemiBold', color: status }}>{event.status}</Text>
           </View>
         )}
       </View>
