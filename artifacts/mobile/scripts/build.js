@@ -7,6 +7,18 @@ const { pipeline } = require('stream/promises');
 let metroProcess = null;
 
 const projectRoot = path.resolve(__dirname, '..');
+const metroCompatPath = path.join(
+  projectRoot,
+  'scripts',
+  'image-size-metro-compat.cjs',
+);
+
+function getMetroNodeOptions() {
+  const existing = process.env.NODE_OPTIONS || '';
+  return existing.includes(metroCompatPath)
+    ? existing
+    : `${existing} --require=${metroCompatPath}`.trim();
+}
 
 function findWorkspaceRoot(startDir) {
   let dir = startDir;
@@ -140,6 +152,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
   console.log(`Setting EXPO_PUBLIC_DOMAIN=${expoPublicDomain}`);
   const env = {
     ...process.env,
+    NODE_OPTIONS: getMetroNodeOptions(),
     EXPO_PUBLIC_DOMAIN: expoPublicDomain,
     EXPO_PUBLIC_REPL_ID: expoPublicReplId,
   };

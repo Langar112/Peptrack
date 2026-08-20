@@ -327,7 +327,7 @@ export default function AddCycleScreen() {
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace('/(tabs)/');
+      router.replace('/');
     } catch (err: any) {
       Alert.alert('Error', err.message ?? 'Failed to save cycle. Please try again.');
     } finally {

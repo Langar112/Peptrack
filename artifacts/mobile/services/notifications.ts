@@ -42,15 +42,32 @@ async function getNotifications(): Promise<NotificationsModule | null> {
 const NOTIF_MAP_KEY = '@peptidetracker/notif_ids';
 const MAX_PER_CYCLE = 20; // stay well under iOS 64 limit
 
-// ─── Permission ───────────────────────────────────────────────────────────────
+type NotificationPermissions = Awaited<
+  ReturnType<NotificationsModule['getPermissionsAsync']>
+>;
+
+function hasNotificationPermission(
+  Notifications: NotificationsModule,
+  permissions: NotificationPermissions,
+): boolean {
+  if (Platform.OS === 'ios') {
+    const status = permissions.ios?.status;
+    return (
+      status === Notifications.IosAuthorizationStatus.AUTHORIZED ||
+      status === Notifications.IosAuthorizationStatus.PROVISIONAL
+    );
+  }
+
+  return (permissions.android?.importance ?? 0) > 0;
+}
 
 export async function requestNotificationPermissions(): Promise<boolean> {
   const Notifications = await getNotifications();
   if (!Notifications) return false;
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  if (existing === 'granted') return true;
-  const { status } = await Notifications.requestPermissionsAsync();
-  return status === 'granted';
+  const existing = await Notifications.getPermissionsAsync();
+  if (hasNotificationPermission(Notifications, existing)) return true;
+  const requested = await Notifications.requestPermissionsAsync();
+  return hasNotificationPermission(Notifications, requested);
 }
 
 // ─── AsyncStorage map: cycleId → scheduled notification IDs ──────────────────
