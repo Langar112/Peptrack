@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { api, type InjectionEvent, type CycleWithRule } from '@/services/api';
 import { cancelCycleNotifications } from '@/services/notifications';
 import { getCycleColor } from '@/constants/colors';
+import { CycleIcon } from '@/components/TabIcons';
 
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -585,12 +586,17 @@ export default function CalendarScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`Edit ${name}`}
                   >
-                    <Text style={{ fontSize: 16, fontFamily: 'Inter_600SemiBold', color: colors.foreground }}>{name}</Text>
-                    <Text style={{ fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 2 }}>
-                      {c.desiredDose} {c.doseUnit} · {c.durationWeeks ? `Week ${weekNum} of ${c.durationWeeks}` : `Week ${Math.max(weekNum, 1)}`}
-                    </Text>
-                    <View style={[{ alignSelf: 'flex-start', marginTop: 6, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }, { backgroundColor: c.status === 'paused' ? colors.warning + '20' : colors.success + '20' }]}>
-                      <Text style={{ fontSize: 11, fontFamily: 'Inter_600SemiBold', color: c.status === 'paused' ? colors.warning : colors.success }}>{c.status}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                      <CycleIcon size={19} color={getCycleColor(c.color)} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, fontFamily: 'Inter_600SemiBold', color: colors.foreground }}>{name}</Text>
+                        <Text style={{ fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 2 }}>
+                          {c.desiredDose} {c.doseUnit} · {c.durationWeeks ? `Week ${weekNum} of ${c.durationWeeks}` : `Week ${Math.max(weekNum, 1)}`}
+                        </Text>
+                        <View style={[{ alignSelf: 'flex-start', marginTop: 6, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }, { backgroundColor: c.status === 'paused' ? colors.warning + '20' : colors.success + '20' }]}>
+                          <Text style={{ fontSize: 11, fontFamily: 'Inter_600SemiBold', color: c.status === 'paused' ? colors.warning : colors.success }}>{c.status}</Text>
+                        </View>
+                      </View>
                     </View>
                   </TouchableOpacity>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>

@@ -1,12 +1,10 @@
 import React from 'react';
 import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SymbolView } from 'expo-symbols';
-import { SyringeIcon } from '@/components/SyringeIcon';
+import { CalculatorIcon, CalendarNumberIcon, JournalIcon } from '@/components/TabIcons';
 
 export default function TabLayout() {
   const colors = useColors();
@@ -51,31 +49,21 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Calculator',
-          tabBarIcon: ({ color }) => <SyringeIcon size={23} color={color} />,
+          tabBarIcon: ({ color }) => <CalculatorIcon size={23} color={color} />,
         }}
       />
       <Tabs.Screen
         name="calendar"
         options={{
           title: 'Calendar',
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="calendar" tintColor={color} size={24} />
-            ) : (
-              <Feather name="calendar" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color }) => <CalendarNumberIcon size={23} color={color} />,
         }}
       />
       <Tabs.Screen
         name="journal"
         options={{
           title: 'Journal',
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="book.fill" tintColor={color} size={24} />
-            ) : (
-              <Feather name="book-open" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color }) => <JournalIcon size={23} color={color} />,
         }}
       />
     </Tabs>
