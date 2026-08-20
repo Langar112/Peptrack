@@ -184,6 +184,7 @@ export interface CycleWithRule {
   id: string;
   userId: string;
   peptideCatalogId: string | null;
+  catalogName?: string | null;
   customCompoundName: string | null;
   cycleName: string | null;
   vialAmount: string;
@@ -252,7 +253,7 @@ export interface JournalEntry {
 export interface CreateCycleInput {
   peptideCatalogId?: string;
   customCompoundName?: string;
-  cycleName?: string;
+  cycleName?: string | null;
   vialAmount: number;
   vialUnit: string;
   bacWaterMl: number;
@@ -262,8 +263,8 @@ export interface CreateCycleInput {
   calculatedSyringeUnits: number;
   syringeCapacityMl?: number;
   startDate: string;
-  endDate?: string;
-  durationWeeks?: number;
+  endDate?: string | null;
+  durationWeeks?: number | null;
   ongoing?: boolean;
   scheduleRule?: {
     frequencyType: string;

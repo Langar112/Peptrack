@@ -25,20 +25,24 @@ const ENTRY_TYPES = [
   { value: 'dose_change', label: 'Dose Change', icon: 'trending-up' },
   { value: 'observation', label: 'Observation', icon: 'eye' },
 ];
+const DISPLAY_ENTRY_TYPES = [
+  ...ENTRY_TYPES,
+  { value: 'cycle_update', label: 'Cycle Updated', icon: 'edit-3' },
+];
 
 const OBSERVATION_TAGS = ['Energy', 'Sleep', 'Appetite', 'Mood', 'Recovery', 'Pain', 'Digestion', 'Skin', 'Other'];
 
 function entryTypeLabel(type: string): string {
-  return ENTRY_TYPES.find((t) => t.value === type)?.label ?? type;
+  return DISPLAY_ENTRY_TYPES.find((t) => t.value === type)?.label ?? type;
 }
 
 function entryIcon(type: string): string {
-  return ENTRY_TYPES.find((t) => t.value === type)?.icon ?? 'file-text';
+  return DISPLAY_ENTRY_TYPES.find((t) => t.value === type)?.icon ?? 'file-text';
 }
 
 function entryColor(type: string, colors: any): string {
   if (type === 'dose_change') return colors.warning;
-  if (type === 'observation') return colors.primary;
+  if (type === 'observation' || type === 'cycle_update') return colors.primary;
   return colors.success;
 }
 
@@ -202,7 +206,7 @@ export default function JournalScreen() {
         >
           <Text style={[s.filterChipText, !filterType && { color: colors.primaryForeground }]}>All</Text>
         </TouchableOpacity>
-        {ENTRY_TYPES.map((t) => (
+        {DISPLAY_ENTRY_TYPES.map((t) => (
           <TouchableOpacity
             key={t.value}
             style={[s.filterChip, filterType === t.value && { backgroundColor: colors.primary, borderColor: colors.primary }]}
@@ -238,14 +242,20 @@ export default function JournalScreen() {
                       <Text style={s.cycleLabel} numberOfLines={1}>{cycleLabel}</Text>
                     )}
                   </View>
-                  <TouchableOpacity onPress={() => handleDeleteEntry(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Feather name="trash-2" size={15} color={colors.mutedForeground} />
-                  </TouchableOpacity>
+                  {item.entryType !== 'cycle_update' ? (
+                    <TouchableOpacity onPress={() => handleDeleteEntry(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Feather name="trash-2" size={15} color={colors.mutedForeground} />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
 
                 <Text style={s.entryDate}>{formatEntryDate(item.entryDate)}</Text>
 
-                {item.body ? <Text style={s.entryBody} numberOfLines={3}>{item.body}</Text> : null}
+                {item.body ? (
+                  <Text style={s.entryBody} numberOfLines={item.entryType === 'cycle_update' ? undefined : 3}>
+                    {item.body}
+                  </Text>
+                ) : null}
 
                 {item.entryType === 'dose_change' && item.previousDose && (
                   <View style={s.doseChangeRow}>

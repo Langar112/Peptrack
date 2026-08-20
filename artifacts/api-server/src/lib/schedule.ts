@@ -65,8 +65,15 @@ export function generateInjectionEvents(opts: GenerateOptions): InjectionEventIn
     }
   } else if (frequencyType === "every_x_days") {
     const interval = intervalDays ?? 1;
-    let cur = new Date(effectiveStart);
+    const effectiveDay = new Date(effectiveStart);
+    effectiveDay.setHours(0, 0, 0, 0);
+    let cur = new Date(startDate);
     cur.setHours(0, 0, 0, 0);
+    if (cur < effectiveDay) {
+      const daysSinceStart = Math.floor((effectiveDay.getTime() - cur.getTime()) / (24 * 60 * 60 * 1000));
+      const intervalsToAdvance = Math.ceil(daysSinceStart / interval);
+      cur.setDate(cur.getDate() + intervalsToAdvance * interval);
+    }
     while (cur <= endDate) {
       scheduledDates.push(new Date(cur));
       cur.setDate(cur.getDate() + interval);

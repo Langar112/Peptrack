@@ -96,6 +96,7 @@ export default function AddCycleScreen() {
   const [injectionTimes, setInjectionTimes] = useState<string[]>(['any']);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingExistingCycle, setIsLoadingExistingCycle] = useState(Boolean(params.editId));
   const [showSummary, setShowSummary] = useState(false);
   const [unitDropdown, setUnitDropdown] = useState<'vial' | 'dose' | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -123,6 +124,65 @@ export default function AddCycleScreen() {
 
     return () => { active = false; };
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!params.editId) {
+      setIsLoadingExistingCycle(false);
+      return;
+    }
+
+    let active = true;
+    const optionalInput = (value: string) => Number(value) === 0 ? '' : value;
+
+    api.cycles.get(params.editId)
+      .then(({ cycle }) => {
+        if (!active) return;
+        setPeptideName(cycle.customCompoundName ?? cycle.catalogName ?? '');
+        setVialAmount(optionalInput(cycle.vialAmount));
+        setVialUnit(cycle.vialUnit);
+        setBacWater(optionalInput(cycle.bacWaterMl));
+        setDesiredDose(cycle.desiredDose);
+        setDoseUnit(cycle.doseUnit);
+        setCalculatedVolumeMl(optionalInput(cycle.calculatedVolumeMl));
+        setCalculatedSyringeUnits(optionalInput(cycle.calculatedSyringeUnits));
+        setSyringeSize(cycle.syringeCapacityMl);
+        setCycleName(cycle.cycleName ?? '');
+        setStartDate(cycle.startDate);
+
+        if (cycle.ongoing) {
+          setDurationType('ongoing');
+          setDurationWeeks('');
+          setEndDate('');
+        } else if (cycle.durationWeeks !== null) {
+          setDurationType('weeks');
+          setDurationWeeks(String(cycle.durationWeeks));
+          setEndDate('');
+        } else {
+          setDurationType('date');
+          setDurationWeeks('');
+          setEndDate(cycle.endDate ?? '');
+        }
+
+        const rule = cycle.scheduleRule;
+        if (rule) {
+          if (['daily', 'specific_days', 'times_per_week', 'every_x_days'].includes(rule.frequencyType)) {
+            setFreqType(rule.frequencyType as FrequencyType);
+          }
+          setSelectedDays(rule.daysOfWeek ?? []);
+          setTimesPerWeek(rule.injectionsPerWeek != null ? String(rule.injectionsPerWeek) : '3');
+          setIntervalDays(rule.intervalDays != null ? String(rule.intervalDays) : '2');
+          setInjectionTimes(rule.injectionTimes?.length ? rule.injectionTimes : ['any']);
+        }
+      })
+      .catch(() => {
+        if (active) Alert.alert('Error', 'Unable to load this cycle for editing.');
+      })
+      .finally(() => {
+        if (active) setIsLoadingExistingCycle(false);
+      });
+
+    return () => { active = false; };
+  }, [params.editId]);
 
   // Compute end date for display
   const computedEndDate =
@@ -153,6 +213,31 @@ export default function AddCycleScreen() {
       return 'Enter a valid desired dose before saving this cycle.';
     }
     if (!freqType) return 'Select an injection frequency before saving this cycle.';
+    if ((freqType === 'specific_days' || freqType === 'times_per_week') && selectedDays.length === 0) {
+      return 'Select at least one injection day before saving this cycle.';
+    }
+    if (new Set(selectedDays).size !== selectedDays.length) {
+      return 'Select each injection day only once.';
+    }
+    if (freqType === 'times_per_week') {
+      const count = Number.parseInt(timesPerWeek, 10);
+      if (!Number.isInteger(count) || count < 1 || count > 7) {
+        return 'Enter between 1 and 7 injections per week.';
+      }
+      if (selectedDays.length !== count) {
+        return 'Select one day for each planned injection per week.';
+      }
+    }
+    if (freqType === 'every_x_days') {
+      const interval = Number.parseInt(intervalDays, 10);
+      if (!Number.isInteger(interval) || interval < 1) {
+        return 'Enter an injection interval of at least 1 day.';
+      }
+    }
+    const validTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+    if (injectionTimes.length === 0 || injectionTimes.some((time) => time !== 'any' && !validTime.test(time))) {
+      return 'Enter a valid injection time or use any time.';
+    }
 
     const optionalNumbers = [
       { label: 'vial amount', value: vialAmount },
@@ -190,7 +275,7 @@ export default function AddCycleScreen() {
       };
       const payload: CreateCycleInput = {
         customCompoundName: peptideName.trim(),
-        cycleName: cycleName.trim() || undefined,
+        cycleName: params.editId ? cycleName.trim() || null : cycleName.trim() || undefined,
         vialAmount: optionalNumber(vialAmount),
         vialUnit,
         bacWaterMl: optionalNumber(bacWater),
@@ -200,8 +285,8 @@ export default function AddCycleScreen() {
         calculatedSyringeUnits: optionalNumber(calculatedSyringeUnits),
         syringeCapacityMl: Number.parseFloat(syringeSize) || 1.0,
         startDate,
-        endDate: computedEndDate || undefined,
-        durationWeeks: computedDurationWeeks || undefined,
+        endDate: durationType === 'ongoing' ? null : computedEndDate || null,
+        durationWeeks: durationType === 'weeks' ? computedDurationWeeks : null,
         ongoing: durationType === 'ongoing',
         scheduleRule,
       };
@@ -269,6 +354,14 @@ export default function AddCycleScreen() {
   };
 
   const s = makeStyles(colors);
+
+  if (isLoadingExistingCycle) {
+    return (
+      <View style={[s.container, { paddingTop: topPad, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={[s.container, { paddingTop: topPad }]}>

@@ -1,2 +1,3 @@
 - [Metro image-size compatibility](metro-image-size-compat.md) — Expo SDK 54’s Metro needs a worker-level path adapter when image-size 2 is forced workspace-wide.
 - [Cycle input validation](cycle-input-validation.md) — Calendar cycles require only a compound, dose, and frequency; blank reconstitution details save as zero.
+- [Cycle audit integrity](cycle-audit-integrity.md) — Cycle edits preserve pre-effective scheduled events and keep generated update records immutable.

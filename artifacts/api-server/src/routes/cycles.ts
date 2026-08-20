@@ -1,11 +1,105 @@
 import { Router } from "express";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, gte, inArray } from "drizzle-orm";
 import { db, cyclesTable, scheduleRulesTable, injectionEventsTable, journalEntriesTable, cycleChangeHistoryTable, peptideCatalogTable } from "@workspace/db";
 import { requireAuth, AuthRequest } from "../lib/auth.js";
 import { generateInjectionEvents } from "../lib/schedule.js";
 
 const router = Router();
 router.use(requireAuth as any);
+
+type CycleAuditChange = {
+  field: string;
+  label: string;
+  previousValue: string;
+  newValue: string;
+};
+
+function displayValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "Not provided";
+  return String(value);
+}
+
+function displaySchedule(rule: {
+  frequencyType: string;
+  injectionsPerWeek?: number | null;
+  daysOfWeek?: string[] | null;
+  intervalDays?: number | null;
+  injectionTimes?: string[] | null;
+} | null): string {
+  if (!rule) return "Not provided";
+  const time = rule.injectionTimes?.length ? ` at ${rule.injectionTimes.join(", ")}` : "";
+  if (rule.frequencyType === "daily") return `Every day${time}`;
+  if (rule.frequencyType === "specific_days") return `${(rule.daysOfWeek ?? []).join(", ") || "Specific days"}${time}`;
+  if (rule.frequencyType === "times_per_week") {
+    const days = rule.daysOfWeek?.length ? ` (${rule.daysOfWeek.join(", ")})` : "";
+    return `${rule.injectionsPerWeek ?? 0} times per week${days}${time}`;
+  }
+  if (rule.frequencyType === "every_x_days") return `Every ${rule.intervalDays ?? 0} days${time}`;
+  return `${rule.frequencyType}${time}`;
+}
+
+function sameStringList(a: string[] | null | undefined, b: string[] | null | undefined, sort = false): boolean {
+  const left = [...(a ?? [])];
+  const right = [...(b ?? [])];
+  if (sort) {
+    left.sort();
+    right.sort();
+  }
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function sameNumericValue(a: unknown, b: unknown): boolean {
+  const aIsBlank = a === null || a === undefined || a === "";
+  const bIsBlank = b === null || b === undefined || b === "";
+  if (aIsBlank || bIsBlank) return aIsBlank === bIsBlank;
+  return Number(a) === Number(b);
+}
+
+function validateScheduleRule(rule: any): string | null {
+  const validFrequencyTypes = ["daily", "specific_days", "times_per_week", "every_x_days"];
+  const validDays = new Set(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]);
+  if (!rule || !validFrequencyTypes.includes(rule.frequencyType)) {
+    return "Select a valid injection frequency before saving this cycle.";
+  }
+
+  const times = rule.injectionTimes ?? ["any"];
+  const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (!Array.isArray(times) || times.length === 0 || times.some((time) => time !== "any" && !timePattern.test(String(time)))) {
+    return "Enter a valid injection time in HH:MM format or use any time.";
+  }
+
+  const days = rule.daysOfWeek ?? [];
+  const normalizedDays = Array.isArray(days) ? days.map((day) => String(day).toLowerCase()) : [];
+  if (
+    (rule.frequencyType === "specific_days" || rule.frequencyType === "times_per_week") &&
+    (
+      normalizedDays.length === 0 ||
+      normalizedDays.some((day) => !validDays.has(day)) ||
+      new Set(normalizedDays).size !== normalizedDays.length
+    )
+  ) {
+    return "Select at least one valid day of the week for this schedule.";
+  }
+
+  if (rule.frequencyType === "times_per_week") {
+    const count = Number(rule.injectionsPerWeek);
+    if (!Number.isInteger(count) || count < 1 || count > 7) {
+      return "Enter between 1 and 7 injections per week.";
+    }
+    if (normalizedDays.length !== count) {
+      return "Select one day for each planned injection per week.";
+    }
+  }
+
+  if (rule.frequencyType === "every_x_days") {
+    const interval = Number(rule.intervalDays);
+    if (!Number.isInteger(interval) || interval < 1) {
+      return "Enter a whole-number injection interval of at least 1 day.";
+    }
+  }
+
+  return null;
+}
 
 // GET /api/cycles — list user's cycles
 router.get("/", async (req: AuthRequest, res) => {
@@ -71,8 +165,9 @@ router.post("/", async (req: AuthRequest, res) => {
       return;
     }
 
-    if (!scheduleRule?.frequencyType) {
-      res.status(400).json({ error: "Select an injection frequency before saving this cycle." });
+    const scheduleError = validateScheduleRule(scheduleRule);
+    if (scheduleError) {
+      res.status(400).json({ error: scheduleError });
       return;
     }
 
@@ -176,7 +271,21 @@ router.get("/:id", async (req: AuthRequest, res) => {
       .where(eq(scheduleRulesTable.cycleId, cycle.id))
       .limit(1);
 
-    res.json({ cycle: { ...cycle, scheduleRule: rule ?? null } });
+    const [catalogCompound] = cycle.peptideCatalogId
+      ? await db
+          .select({ name: peptideCatalogTable.name })
+          .from(peptideCatalogTable)
+          .where(eq(peptideCatalogTable.id, cycle.peptideCatalogId))
+          .limit(1)
+      : [];
+
+    res.json({
+      cycle: {
+        ...cycle,
+        catalogName: catalogCompound?.name ?? null,
+        scheduleRule: rule ?? null,
+      },
+    });
   } catch (err) {
     console.error("Get cycle error:", err);
     res.status(500).json({ error: "Failed to fetch cycle" });
@@ -197,41 +306,146 @@ router.patch("/:id", async (req: AuthRequest, res) => {
       return;
     }
 
-    const { applyFrom, scheduleRule, ...cycleFields } = req.body;
-    const updates: Partial<typeof cyclesTable.$inferInsert> = { updatedAt: new Date() };
+    const [existingRule] = await db
+      .select()
+      .from(scheduleRulesTable)
+      .where(eq(scheduleRulesTable.cycleId, req.params.id))
+      .limit(1);
 
-    const doseFields = ["desiredDose", "doseUnit", "calculatedVolumeMl", "calculatedSyringeUnits"];
-    const doseChanged = doseFields.some((f) => cycleFields[f] !== undefined && String(cycleFields[f]) !== String(existing[f as keyof typeof existing]));
-
-    // Apply scalar cycle field updates
+    const { applyFrom, scheduleRule, ...cycleFields } = req.body ?? {};
+    if (scheduleRule) {
+      const scheduleError = validateScheduleRule(scheduleRule);
+      if (scheduleError) {
+        res.status(400).json({ error: scheduleError });
+        return;
+      }
+    }
+    const changes: CycleAuditChange[] = [];
+    const updates: Partial<typeof cyclesTable.$inferInsert> = {};
     const allowedFields = [
       "cycleName", "vialAmount", "vialUnit", "bacWaterMl", "desiredDose",
       "doseUnit", "calculatedVolumeMl", "calculatedSyringeUnits", "syringeCapacityMl",
       "startDate", "endDate", "durationWeeks", "ongoing", "status", "peptideCatalogId",
       "customCompoundName",
     ];
+    const labels: Record<string, string> = {
+      cycleName: "Cycle name",
+      vialAmount: "Vial amount",
+      vialUnit: "Vial unit",
+      bacWaterMl: "BAC water",
+      desiredDose: "Desired dose",
+      doseUnit: "Dose unit",
+      calculatedVolumeMl: "Volume",
+      calculatedSyringeUnits: "Syringe units",
+      syringeCapacityMl: "Syringe capacity",
+      startDate: "Start date",
+      endDate: "End date",
+      durationWeeks: "Duration (weeks)",
+      ongoing: "Ongoing",
+      status: "Status",
+      peptideCatalogId: "Catalog compound",
+      customCompoundName: "Compound",
+    };
+    const numericFields = new Set([
+      "vialAmount", "bacWaterMl", "desiredDose", "calculatedVolumeMl",
+      "calculatedSyringeUnits", "syringeCapacityMl", "durationWeeks",
+    ]);
     for (const field of allowedFields) {
-      if (cycleFields[field] !== undefined) {
-        (updates as any)[field] = typeof cycleFields[field] === "number"
-          ? String(cycleFields[field])
-          : cycleFields[field];
-      }
+      if (cycleFields[field] === undefined) continue;
+      const nextValue = typeof cycleFields[field] === "number"
+        ? String(cycleFields[field])
+        : cycleFields[field];
+      const currentValue = existing[field as keyof typeof existing];
+      const unchanged = numericFields.has(field)
+        ? sameNumericValue(currentValue, nextValue)
+        : String(currentValue ?? "") === String(nextValue ?? "");
+      if (unchanged) continue;
+      (updates as any)[field] = nextValue;
+      changes.push({
+        field,
+        label: labels[field] ?? field,
+        previousValue: displayValue(currentValue),
+        newValue: displayValue(nextValue),
+      });
     }
 
-    const [updated] = await db
-      .update(cyclesTable)
-      .set(updates)
-      .where(eq(cyclesTable.id, req.params.id))
-      .returning();
+    const scheduleChanged = Boolean(scheduleRule) && (
+      !existingRule ||
+      existingRule.frequencyType !== scheduleRule.frequencyType ||
+      existingRule.injectionsPerWeek !== (scheduleRule.injectionsPerWeek ?? null) ||
+      existingRule.intervalDays !== (scheduleRule.intervalDays ?? null) ||
+      existingRule.timezone !== (scheduleRule.timezone ?? "UTC") ||
+      !sameStringList(existingRule.daysOfWeek, scheduleRule.daysOfWeek, true) ||
+      !sameStringList(existingRule.injectionTimes, scheduleRule.injectionTimes)
+    );
 
-    // If dose changed, create journal entry and log change history
-    if (doseChanged) {
-      await db.insert(journalEntriesTable).values({
+    if (scheduleChanged) {
+      changes.push({
+        field: "schedule",
+        label: "Schedule",
+        previousValue: displaySchedule(existingRule ?? null),
+        newValue: displaySchedule({
+          frequencyType: scheduleRule.frequencyType,
+          injectionsPerWeek: scheduleRule.injectionsPerWeek ?? null,
+          daysOfWeek: scheduleRule.daysOfWeek ?? null,
+          intervalDays: scheduleRule.intervalDays ?? null,
+          injectionTimes: scheduleRule.injectionTimes ?? ["any"],
+        }),
+      });
+    }
+
+    if (changes.length === 0) {
+      res.json({ cycle: { ...existing, scheduleRule: existingRule ?? null } });
+      return;
+    }
+
+    const effectiveDate = applyFrom ?? new Date().toISOString().slice(0, 10);
+    const scheduleSensitiveFields = new Set([
+      "desiredDose", "doseUnit", "calculatedVolumeMl", "calculatedSyringeUnits",
+      "startDate", "endDate", "durationWeeks", "ongoing",
+    ]);
+    const shouldRegenerateEvents = scheduleChanged || changes.some((change) => scheduleSensitiveFields.has(change.field));
+
+    const result = await db.transaction(async (tx) => {
+      updates.updatedAt = new Date();
+      const [updated] = await tx
+        .update(cyclesTable)
+        .set(updates)
+        .where(eq(cyclesTable.id, req.params.id))
+        .returning();
+
+      let rule = existingRule ?? null;
+      if (scheduleChanged && scheduleRule) {
+        const ruleValues = {
+          frequencyType: scheduleRule.frequencyType,
+          injectionsPerWeek: scheduleRule.injectionsPerWeek ?? null,
+          daysOfWeek: scheduleRule.daysOfWeek ?? null,
+          intervalDays: scheduleRule.intervalDays ?? null,
+          injectionTimes: scheduleRule.injectionTimes ?? ["any"],
+          timezone: scheduleRule.timezone ?? "UTC",
+        };
+        if (existingRule) {
+          const [updatedRule] = await tx
+            .update(scheduleRulesTable)
+            .set({ ...ruleValues, updatedAt: new Date() })
+            .where(eq(scheduleRulesTable.id, existingRule.id))
+            .returning();
+          rule = updatedRule;
+        } else {
+          const [createdRule] = await tx
+            .insert(scheduleRulesTable)
+            .values({ cycleId: req.params.id, ...ruleValues })
+            .returning();
+          rule = createdRule;
+        }
+      }
+
+      await tx.insert(journalEntriesTable).values({
         userId: req.user!.userId,
         cycleId: updated.id,
-        entryType: "dose_change",
+        entryType: "cycle_update",
         entryDate: new Date(),
-        body: `Dose changed from ${existing.desiredDose} ${existing.doseUnit} to ${updated.desiredDose} ${updated.doseUnit}`,
+        body: `Cycle updated:\n${changes.map((change) => `${change.label}: ${change.previousValue} → ${change.newValue}`).join("\n")}`,
         previousDose: String(existing.desiredDose),
         newDose: String(updated.desiredDose),
         doseUnit: updated.doseUnit,
@@ -239,87 +453,43 @@ router.patch("/:id", async (req: AuthRequest, res) => {
         newSyringeUnits: String(updated.calculatedSyringeUnits),
       });
 
-      await db.insert(cycleChangeHistoryTable).values({
-        cycleId: updated.id,
-        userId: req.user!.userId,
-        fieldChanged: "dose",
-        previousValue: `${existing.desiredDose} ${existing.doseUnit}`,
-        newValue: `${updated.desiredDose} ${updated.doseUnit}`,
-        effectiveDate: applyFrom ?? new Date().toISOString().slice(0, 10),
-      });
-
-      // Update future scheduled events from applyFrom forward
-      const fromDate = applyFrom ? new Date(applyFrom) : new Date();
-      // Delete future scheduled events and regenerate
-      await db.delete(injectionEventsTable).where(
-        and(
-          eq(injectionEventsTable.cycleId, req.params.id),
-          eq(injectionEventsTable.status, "scheduled")
-        )
-      );
-    }
-
-    // Update schedule rule if provided
-    let rule = null;
-    if (scheduleRule) {
-      const existing = await db
-        .select()
-        .from(scheduleRulesTable)
-        .where(eq(scheduleRulesTable.cycleId, req.params.id))
-        .limit(1);
-
-      if (existing.length > 0) {
-        const [r] = await db
-          .update(scheduleRulesTable)
-          .set({
-            frequencyType: scheduleRule.frequencyType,
-            injectionsPerWeek: scheduleRule.injectionsPerWeek ?? null,
-            daysOfWeek: scheduleRule.daysOfWeek ?? null,
-            intervalDays: scheduleRule.intervalDays ?? null,
-            injectionTimes: scheduleRule.injectionTimes ?? ["any"],
-            timezone: scheduleRule.timezone ?? "UTC",
-            updatedAt: new Date(),
-          })
-          .where(eq(scheduleRulesTable.id, existing[0].id))
-          .returning();
-        rule = r;
-      } else {
-        const [r] = await db
-          .insert(scheduleRulesTable)
-          .values({
-            cycleId: req.params.id,
-            frequencyType: scheduleRule.frequencyType,
-            injectionsPerWeek: scheduleRule.injectionsPerWeek ?? null,
-            daysOfWeek: scheduleRule.daysOfWeek ?? null,
-            intervalDays: scheduleRule.intervalDays ?? null,
-            injectionTimes: scheduleRule.injectionTimes ?? ["any"],
-            timezone: scheduleRule.timezone ?? "UTC",
-          })
-          .returning();
-        rule = r;
-      }
-
-      // Regenerate future events
-      await db.delete(injectionEventsTable).where(
-        and(
-          eq(injectionEventsTable.cycleId, req.params.id),
-          eq(injectionEventsTable.status, "scheduled")
-        )
+      await tx.insert(cycleChangeHistoryTable).values(
+        changes.map((change) => ({
+          cycleId: updated.id,
+          userId: req.user!.userId,
+          fieldChanged: change.field,
+          previousValue: change.previousValue,
+          newValue: change.newValue,
+          effectiveDate,
+        }))
       );
 
-      const events = generateInjectionEvents({
-        cycle: updated,
-        scheduleRule: rule,
-        userId: req.user!.userId,
-        fromDate: applyFrom ? new Date(applyFrom) : new Date(),
-      });
+      if (shouldRegenerateEvents && rule) {
+        const regenerationFrom = applyFrom ? new Date(`${applyFrom}T00:00:00`) : new Date();
+        regenerationFrom.setHours(0, 0, 0, 0);
+        await tx.delete(injectionEventsTable).where(
+          and(
+            eq(injectionEventsTable.cycleId, req.params.id),
+            eq(injectionEventsTable.status, "scheduled"),
+            gte(injectionEventsTable.scheduledAt, regenerationFrom)
+          )
+        );
 
-      if (events.length > 0) {
-        await db.insert(injectionEventsTable).values(events);
+        const events = generateInjectionEvents({
+          cycle: updated,
+          scheduleRule: rule,
+          userId: req.user!.userId,
+          fromDate: regenerationFrom,
+        });
+        if (events.length > 0) {
+          await tx.insert(injectionEventsTable).values(events);
+        }
       }
-    }
 
-    res.json({ cycle: { ...updated, scheduleRule: rule } });
+      return { updated, rule };
+    });
+
+    res.json({ cycle: { ...result.updated, scheduleRule: result.rule } });
   } catch (err) {
     console.error("Update cycle error:", err);
     res.status(500).json({ error: "Failed to update cycle" });

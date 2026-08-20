@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, and, desc, ilike, gte, lte } from "drizzle-orm";
-import { db, journalEntriesTable, cyclesTable } from "@workspace/db";
+import { db, journalEntriesTable, cyclesTable, injectionEventsTable } from "@workspace/db";
 import { requireAuth, AuthRequest } from "../lib/auth.js";
 
 const router = Router();
@@ -74,6 +74,32 @@ router.post("/", async (req: AuthRequest, res) => {
       res.status(400).json({ error: "entryType and entryDate are required" });
       return;
     }
+    if (entryType === "cycle_update") {
+      res.status(403).json({ error: "Cycle update entries are created automatically." });
+      return;
+    }
+    if (cycleId) {
+      const [cycle] = await db
+        .select({ id: cyclesTable.id })
+        .from(cyclesTable)
+        .where(and(eq(cyclesTable.id, cycleId), eq(cyclesTable.userId, req.user!.userId)))
+        .limit(1);
+      if (!cycle) {
+        res.status(400).json({ error: "The selected cycle was not found." });
+        return;
+      }
+    }
+    if (injectionEventId) {
+      const [event] = await db
+        .select({ id: injectionEventsTable.id })
+        .from(injectionEventsTable)
+        .where(and(eq(injectionEventsTable.id, injectionEventId), eq(injectionEventsTable.userId, req.user!.userId)))
+        .limit(1);
+      if (!event) {
+        res.status(400).json({ error: "The selected injection event was not found." });
+        return;
+      }
+    }
 
     const [entry] = await db
       .insert(journalEntriesTable)
@@ -121,12 +147,39 @@ router.get("/:id", async (req: AuthRequest, res) => {
 router.patch("/:id", async (req: AuthRequest, res) => {
   try {
     const [existing] = await db
-      .select({ id: journalEntriesTable.id })
+      .select({ id: journalEntriesTable.id, entryType: journalEntriesTable.entryType })
       .from(journalEntriesTable)
       .where(and(eq(journalEntriesTable.id, req.params.id), eq(journalEntriesTable.userId, req.user!.userId)))
       .limit(1);
 
     if (!existing) { res.status(404).json({ error: "Entry not found" }); return; }
+    if (existing.entryType === "cycle_update") {
+      res.status(403).json({ error: "Cycle update entries cannot be edited." });
+      return;
+    }
+
+    if (req.body.cycleId !== undefined && req.body.cycleId !== null) {
+      const [cycle] = await db
+        .select({ id: cyclesTable.id })
+        .from(cyclesTable)
+        .where(and(eq(cyclesTable.id, req.body.cycleId), eq(cyclesTable.userId, req.user!.userId)))
+        .limit(1);
+      if (!cycle) {
+        res.status(400).json({ error: "The selected cycle was not found." });
+        return;
+      }
+    }
+    if (req.body.injectionEventId !== undefined && req.body.injectionEventId !== null) {
+      const [event] = await db
+        .select({ id: injectionEventsTable.id })
+        .from(injectionEventsTable)
+        .where(and(eq(injectionEventsTable.id, req.body.injectionEventId), eq(injectionEventsTable.userId, req.user!.userId)))
+        .limit(1);
+      if (!event) {
+        res.status(400).json({ error: "The selected injection event was not found." });
+        return;
+      }
+    }
 
     const allowedFields = ["body", "entryDate", "cycleId", "previousDose", "newDose", "doseUnit", "previousSyringeUnits", "newSyringeUnits", "intensityRating", "tags"];
     const updates: Record<string, any> = { updatedAt: new Date() };
@@ -152,12 +205,16 @@ router.patch("/:id", async (req: AuthRequest, res) => {
 router.delete("/:id", async (req: AuthRequest, res) => {
   try {
     const [existing] = await db
-      .select({ id: journalEntriesTable.id })
+      .select({ id: journalEntriesTable.id, entryType: journalEntriesTable.entryType })
       .from(journalEntriesTable)
       .where(and(eq(journalEntriesTable.id, req.params.id), eq(journalEntriesTable.userId, req.user!.userId)))
       .limit(1);
 
     if (!existing) { res.status(404).json({ error: "Entry not found" }); return; }
+    if (existing.entryType === "cycle_update") {
+      res.status(403).json({ error: "Cycle update entries cannot be deleted." });
+      return;
+    }
 
     await db.delete(journalEntriesTable).where(eq(journalEntriesTable.id, req.params.id));
     res.json({ success: true });
