@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Platform, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -15,7 +15,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { requestNotificationPermissions } from '@/services/notifications';
 
@@ -39,6 +39,33 @@ function HeaderRightSettings() {
 
 function RootLayoutNav() {
   const colors = useColors();
+  const { isLoading, sessionError, retrySession } = useAuth();
+
+  if (isLoading || sessionError) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: colors.background }}>
+        {isLoading ? (
+          <ActivityIndicator color={colors.primary} />
+        ) : (
+          <>
+            <Text style={{ fontSize: 17, fontFamily: 'Inter_600SemiBold', color: colors.foreground, textAlign: 'center' }}>
+              We couldn’t start your private session
+            </Text>
+            <Text style={{ marginTop: 8, fontSize: 14, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, textAlign: 'center', lineHeight: 20 }}>
+              {sessionError}
+            </Text>
+            <TouchableOpacity
+              onPress={retrySession}
+              style={{ marginTop: 20, backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 11 }}
+            >
+              <Text style={{ fontSize: 14, fontFamily: 'Inter_600SemiBold', color: colors.primaryForeground }}>Try again</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    );
+  }
+
   return (
     <Stack
       screenOptions={{
@@ -59,8 +86,6 @@ function RootLayoutNav() {
       <Stack.Screen name="cycle/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
       <Stack.Screen name="add-cycle" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
       <Stack.Screen name="settings" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
-      <Stack.Screen name="auth/login" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
-      <Stack.Screen name="auth/register" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
     </Stack>
   );
 }

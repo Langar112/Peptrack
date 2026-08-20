@@ -7,7 +7,6 @@ import {
   Text,
   TouchableOpacity,
   View,
-  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -22,9 +21,8 @@ export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout, updateUser, isAuthenticated } = useAuth();
+  const { user, updateUser, resetPrivateData } = useAuth();
   const topPad = Platform.OS === 'web' ? 20 : insets.top;
-  const [isSaving, setIsSaving] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
 
   const handleThemeChange = async (theme: string) => {
@@ -54,32 +52,19 @@ export default function SettingsScreen() {
     } catch { }
   };
 
-  const handleLogout = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out', style: 'destructive', onPress: async () => {
-          await logout();
-          router.back();
-        }
-      }
-    ]);
-  };
-
-  const handleDeleteAccount = () => {
+  const handleDeletePrivateData = () => {
     Alert.alert(
-      'Delete Account',
-      'This will permanently delete your account and all data. This action cannot be undone.',
+      'Delete All Data',
+      'This permanently deletes all cycles, injections, journal entries, and settings on this device. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete Account', style: 'destructive', onPress: async () => {
+          text: 'Delete All Data', style: 'destructive', onPress: async () => {
             try {
-              await api.auth.deleteAccount();
-              await logout();
+              await resetPrivateData();
               router.back();
             } catch {
-              Alert.alert('Error', 'Failed to delete account. Please try again.');
+              Alert.alert('Error', 'Failed to delete your data. Please try again.');
             }
           }
         }
@@ -100,29 +85,20 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
-        {/* Account */}
-        {isAuthenticated && user ? (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Account</Text>
-            <View style={s.card}>
-              <Row icon="mail" label="Email" value={user.email} colors={colors} />
-              <Row icon="clock" label="Member since" value={new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })} colors={colors} />
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Your Data</Text>
+          <View style={s.card}>
+            <View style={s.dataInfo}>
+              <View style={s.rowLeft}>
+                <Feather name="smartphone" size={18} color={colors.primary} />
+                <Text style={s.rowLabel}>Private to this device</Text>
+              </View>
+              <Text style={s.dataInfoText}>
+                Your cycles, injection history, and journal stay private to this installation. They cannot be recovered after uninstalling or moving to another device.
+              </Text>
             </View>
           </View>
-        ) : (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Account</Text>
-            <View style={s.card}>
-              <TouchableOpacity style={s.cardRow} onPress={() => router.push('/auth/register')}>
-                <View style={s.rowLeft}>
-                  <Feather name="user-plus" size={18} color={colors.primary} />
-                  <Text style={[s.rowLabel, { color: colors.primary }]}>Create Account</Text>
-                </View>
-                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+        </View>
 
         {/* Appearance */}
         <View style={s.section}>
@@ -241,22 +217,11 @@ export default function SettingsScreen() {
           </Text>
         </View>
 
-        {/* Account actions */}
-        {isAuthenticated && (
-          <View style={s.section}>
-            <View style={s.card}>
-              <TouchableOpacity style={[s.cardRow, { borderBottomWidth: 0 }]} onPress={handleLogout}>
-                <View style={s.rowLeft}>
-                  <Feather name="log-out" size={18} color={colors.destructive} />
-                  <Text style={[s.rowLabel, { color: colors.destructive }]}>Sign Out</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity style={s.deleteAccountBtn} onPress={handleDeleteAccount}>
-              <Text style={s.deleteAccountText}>Delete Account</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={s.section}>
+          <TouchableOpacity style={s.deleteAccountBtn} onPress={handleDeletePrivateData}>
+            <Text style={s.deleteAccountText}>Delete All Data</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <DisclaimerModal
@@ -264,18 +229,6 @@ export default function SettingsScreen() {
         readOnly
         onDecline={() => setShowDisclaimer(false)}
       />
-    </View>
-  );
-}
-
-function Row({ icon, label, value, colors }: { icon: string; label: string; value: string; colors: any }) {
-  return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Feather name={icon as any} size={18} color={colors.mutedForeground} />
-        <Text style={{ fontSize: 15, fontFamily: 'Inter_400Regular', color: colors.foreground }}>{label}</Text>
-      </View>
-      <Text style={{ fontSize: 14, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, maxWidth: '55%', textAlign: 'right' }}>{value}</Text>
     </View>
   );
 }
@@ -294,6 +247,8 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
     segmented: { flexDirection: 'row', backgroundColor: colors.muted, borderRadius: 8, padding: 2 },
     segment: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
     segmentText: { fontSize: 12, fontFamily: 'Inter_500Medium', color: colors.mutedForeground },
+    dataInfo: { paddingHorizontal: 16, paddingVertical: 14 },
+    dataInfoText: { marginTop: 10, fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, lineHeight: 19 },
     disclaimerBox: { backgroundColor: colors.muted, borderRadius: colors.radius - 4, padding: 14, marginTop: 16 },
     disclaimerText: { fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, textAlign: 'center', lineHeight: 16 },
     deleteAccountBtn: { alignItems: 'center', marginTop: 12, paddingVertical: 12 },

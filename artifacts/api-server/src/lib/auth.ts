@@ -1,28 +1,19 @@
-import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 
 const SECRET = process.env.SESSION_SECRET;
 if (!SECRET) throw new Error("SESSION_SECRET must be set");
 
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 12);
+export function signToken(payload: { userId: string }): string {
+  return jwt.sign(payload, SECRET!, { expiresIn: "10y" });
 }
 
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
-}
-
-export function signToken(payload: { userId: string; email: string }): string {
-  return jwt.sign(payload, SECRET!, { expiresIn: "30d" });
-}
-
-export function verifyToken(token: string): { userId: string; email: string } {
-  return jwt.verify(token, SECRET!) as { userId: string; email: string };
+export function verifyToken(token: string): { userId: string; email?: string } {
+  return jwt.verify(token, SECRET!) as { userId: string; email?: string };
 }
 
 export interface AuthRequest extends Request {
-  user?: { userId: string; email: string };
+  user?: { userId: string; email?: string };
 }
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {

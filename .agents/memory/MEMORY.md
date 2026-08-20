@@ -3,3 +3,4 @@
 - [Cycle input validation](cycle-input-validation.md) — Calendar cycles require only a compound, dose, and frequency; blank reconstitution details save as zero.
 - [Cycle audit integrity](cycle-audit-integrity.md) — Cycle edits preserve pre-effective scheduled events and keep generated update records immutable.
 - [Expo notification permission types](expo-notification-permission-types.md) — Newer notifications packages may lose inherited permission fields against the workspace Expo SDK.
+- [Private device sessions](private-device-sessions.md) — PepTrack uses opaque anonymous sessions per installation; account recovery is intentionally unavailable.

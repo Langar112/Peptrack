@@ -17,7 +17,6 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
-import { useAuth } from '@/contexts/AuthContext';
 import { api, type JournalEntry, type CycleWithRule } from '@/services/api';
 import { getCycleColor } from '@/constants/colors';
 
@@ -55,7 +54,6 @@ export default function JournalScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
@@ -77,7 +75,6 @@ export default function JournalScreen() {
   const [cyclePickerModal, setCyclePickerModal] = useState(false);
 
   const fetchEntries = useCallback(async () => {
-    if (!isAuthenticated) return;
     setIsLoading(true);
     try {
       const params: any = {};
@@ -87,14 +84,12 @@ export default function JournalScreen() {
       const { entries } = await api.journal.list(params);
       setEntries(entries);
     } catch { } finally { setIsLoading(false); }
-  }, [isAuthenticated, filterType, filterCycleId, search]);
+  }, [filterType, filterCycleId, search]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchEntries();
-      api.cycles.list().then(({ cycles }) => setCycles(cycles)).catch(() => {});
-    }
-  }, [isAuthenticated, fetchEntries]);
+    fetchEntries();
+    api.cycles.list().then(({ cycles }) => setCycles(cycles)).catch(() => {});
+  }, [fetchEntries]);
 
   const resetForm = () => {
     setEntryType('general_note');
@@ -146,21 +141,6 @@ export default function JournalScreen() {
   };
 
   const s = makeStyles(colors);
-
-  if (!isAuthenticated) {
-    return (
-      <View style={[s.container, { paddingTop: topPad, alignItems: 'center', justifyContent: 'center' }]}>
-        <Feather name="book-open" size={48} color={colors.border} />
-        <Text style={[s.headerTitle, { marginTop: 16, marginBottom: 8, textAlign: 'center' }]}>Journal</Text>
-        <Text style={[s.subtitle, { textAlign: 'center', paddingHorizontal: 40, marginBottom: 24 }]}>
-          Create an account to record observations, dose changes, and notes.
-        </Text>
-        <TouchableOpacity style={s.primaryBtn} onPress={() => router.push('/auth/register')} activeOpacity={0.8}>
-          <Text style={s.primaryBtnText}>Create Account</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
 
   const linkedCycle = cycles.find((c) => c.id === linkedCycleId);
 

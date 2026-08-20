@@ -51,23 +51,17 @@ export class ApiError extends Error {
 // Auth
 export const api = {
   auth: {
-    register: (email: string, password: string) =>
-      request<{ token: string; user: User }>('/auth/register', {
+    anonymous: () =>
+      request<{ token: string; user: User }>('/auth/anonymous', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
       }),
-    login: (email: string, password: string) =>
-      request<{ token: string; user: User }>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      }),
-    me: () => request<{ user: User }>('/auth/me'),
+    me: () => request<{ token: string; user: User }>('/auth/me'),
     updateSettings: (settings: Partial<UserSettings>) =>
       request<{ user: User }>('/auth/settings', {
         method: 'PATCH',
         body: JSON.stringify(settings),
       }),
-    deleteAccount: () =>
+    deletePrivateData: () =>
       request<{ success: boolean }>('/auth/account', { method: 'DELETE' }),
   },
 
@@ -145,7 +139,6 @@ export const api = {
 // Types
 export interface User {
   id: string;
-  email: string;
   timezone: string;
   theme: string;
   firstDayOfWeek: string;

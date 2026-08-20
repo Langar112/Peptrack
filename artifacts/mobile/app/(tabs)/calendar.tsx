@@ -18,7 +18,6 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
-import { useAuth } from '@/contexts/AuthContext';
 import { api, type InjectionEvent, type CycleWithRule } from '@/services/api';
 import { cancelCycleNotifications } from '@/services/notifications';
 import { getCycleColor } from '@/constants/colors';
@@ -93,7 +92,6 @@ export default function CalendarScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isAuthenticated, user } = useAuth();
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const today = new Date();
@@ -153,7 +151,6 @@ export default function CalendarScreen() {
   };
 
   const fetchData = useCallback(async () => {
-    if (!isAuthenticated) return;
     setIsLoading(true);
     try {
       let fromDate: Date, toDate: Date;
@@ -181,7 +178,7 @@ export default function CalendarScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, currentDate, viewMode]);
+  }, [currentDate, viewMode]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -222,21 +219,6 @@ export default function CalendarScreen() {
   };
 
   const s = makeStyles(colors);
-
-  if (!isAuthenticated) {
-    return (
-      <View style={[s.container, { paddingTop: topPad, alignItems: 'center', justifyContent: 'center' }]}>
-        <Feather name="calendar" size={48} color={colors.border} />
-        <Text style={[s.headerTitle, { marginTop: 16, marginBottom: 8, textAlign: 'center' }]}>Calendar</Text>
-        <Text style={[s.subtitle, { textAlign: 'center', paddingHorizontal: 40, marginBottom: 24 }]}>
-          Create an account to schedule injection cycles and view your calendar.
-        </Text>
-        <TouchableOpacity style={s.primaryBtn} onPress={() => router.push('/auth/register')} activeOpacity={0.8}>
-          <Text style={s.primaryBtnText}>Create Account</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
 
   // ── Monthly View ──────────────────────────────────────────────────────────
   const renderMonthlyView = () => {

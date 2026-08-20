@@ -17,7 +17,6 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
-import { useAuth } from '@/contexts/AuthContext';
 
 // ─── Catalog ────────────────────────────────────────────────────────────────
 const PEPTIDES = [
@@ -115,7 +114,6 @@ export default function CalculatorScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   // Form state
@@ -224,10 +222,6 @@ export default function CalculatorScreen() {
 
   const handleStartCycle = () => {
     if (!result) return;
-    if (!isAuthenticated) {
-      router.push('/auth/register');
-      return;
-    }
     router.push({
       pathname: '/add-cycle',
       params: {

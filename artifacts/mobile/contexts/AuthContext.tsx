@@ -1,15 +1,15 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api, getToken, setToken, clearToken, type User } from '@/services/api';
+import { restoreOrCreatePrivateSession } from '@/services/privateSession';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
+  sessionError: string | null;
   updateUser: (updates: Partial<User>) => void;
   refreshUser: () => Promise<void>;
+  retrySession: () => Promise<void>;
+  resetPrivateData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -17,41 +17,38 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
+  const startSession = useCallback(async () => {
+    setIsLoading(true);
+    setSessionError(null);
+    try {
+      const newUser = await restoreOrCreatePrivateSession({
+        getStoredToken: getToken,
+        storeToken: setToken,
+        clearStoredToken: clearToken,
+        restoreUser: api.auth.me,
+        createAnonymousSession: api.auth.anonymous,
+      });
+      setUser(newUser);
+    } catch {
+      setUser(null);
+      setSessionError('Unable to start your private session. Check your connection and try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    // Try to restore session from stored token
-    const restore = async () => {
-      try {
-        const token = await getToken();
-        if (!token) return;
-        const { user } = await api.auth.me();
-        setUser(user);
-      } catch {
-        // Token invalid or expired — clear it
-        await clearToken();
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    restore();
-  }, []);
+    startSession();
+  }, [startSession]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { token, user } = await api.auth.login(email, password);
-    await setToken(token);
-    setUser(user);
-  }, []);
-
-  const register = useCallback(async (email: string, password: string) => {
-    const { token, user } = await api.auth.register(email, password);
-    await setToken(token);
-    setUser(user);
-  }, []);
-
-  const logout = useCallback(async () => {
+  const resetPrivateData = useCallback(async () => {
+    await api.auth.deletePrivateData();
     await clearToken();
     setUser(null);
-  }, []);
+    await startSession();
+  }, [startSession]);
 
   const updateUser = useCallback((updates: Partial<User>) => {
     setUser((prev) => (prev ? { ...prev, ...updates } : prev));
@@ -59,10 +56,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const { user } = await api.auth.me();
+      const { user, token } = await api.auth.me();
+      await setToken(token);
       setUser(user);
     } catch {
-      // ignore
+      // A fresh session will be created on the next app launch.
     }
   }, []);
 
@@ -71,12 +69,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         isLoading,
-        isAuthenticated: user !== null,
-        login,
-        register,
-        logout,
+        sessionError,
         updateUser,
         refreshUser,
+        retrySession: startSession,
+        resetPrivateData,
       }}
     >
       {children}
