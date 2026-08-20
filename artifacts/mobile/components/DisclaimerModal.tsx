@@ -12,11 +12,12 @@ import { useColors } from '@/hooks/useColors';
 
 interface DisclaimerModalProps {
   visible: boolean;
-  onAccept: () => void;
+  onAccept?: () => void;
   onDecline: () => void;
+  readOnly?: boolean;
 }
 
-export function DisclaimerModal({ visible, onAccept, onDecline }: DisclaimerModalProps) {
+export function DisclaimerModal({ visible, onAccept, onDecline, readOnly = false }: DisclaimerModalProps) {
   const colors = useColors();
   const [checked, setChecked] = useState(false);
 
@@ -26,8 +27,9 @@ export function DisclaimerModal({ visible, onAccept, onDecline }: DisclaimerModa
   }, [visible]);
 
   const handleAccept = () => {
+    if (readOnly) return;
     if (!checked) return;
-    onAccept();
+    onAccept?.();
   };
 
   const handleDecline = () => {
@@ -52,7 +54,7 @@ export function DisclaimerModal({ visible, onAccept, onDecline }: DisclaimerModa
           </View>
           <Text style={[s.title, { color: colors.foreground }]}>Safety Disclaimer</Text>
           <Text style={[s.subtitle, { color: colors.mutedForeground }]}>
-            Please read before saving your first cycle
+            {readOnly ? 'Review the information before using the app' : 'Please read before saving your first cycle'}
           </Text>
         </View>
 
@@ -89,37 +91,51 @@ export function DisclaimerModal({ visible, onAccept, onDecline }: DisclaimerModa
             this app. You use this application entirely at your own risk.
           </Text>
 
-          {/* Checkbox */}
-          <TouchableOpacity
-            style={[s.checkRow, { backgroundColor: colors.card, borderColor: checked ? colors.primary : colors.border }]}
-            onPress={() => setChecked((v) => !v)}
-            activeOpacity={0.7}
-          >
-            <View style={[s.checkbox, { borderColor: checked ? colors.primary : colors.border, backgroundColor: checked ? colors.primary : 'transparent' }]}>
-              {checked && <Feather name="check" size={12} color={colors.primaryForeground} />}
-            </View>
-            <Text style={[s.checkLabel, { color: colors.foreground }]}>
-              I understand this app is for research and educational purposes only, and I
-              accept full responsibility for my use of this information.
-            </Text>
-          </TouchableOpacity>
+          {!readOnly && (
+            <TouchableOpacity
+              style={[s.checkRow, { backgroundColor: colors.card, borderColor: checked ? colors.primary : colors.border }]}
+              onPress={() => setChecked((v) => !v)}
+              activeOpacity={0.7}
+            >
+              <View style={[s.checkbox, { borderColor: checked ? colors.primary : colors.border, backgroundColor: checked ? colors.primary : 'transparent' }]}>
+                {checked && <Feather name="check" size={12} color={colors.primaryForeground} />}
+              </View>
+              <Text style={[s.checkLabel, { color: colors.foreground }]}>
+                I understand this app is for research and educational purposes only, and I
+                accept full responsibility for my use of this information.
+              </Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
 
         {/* Footer buttons */}
         <View style={[s.footer, { borderTopColor: colors.border }]}>
-          <TouchableOpacity style={[s.declineBtn, { borderColor: colors.border }]} onPress={handleDecline}>
-            <Text style={[s.declineBtnText, { color: colors.mutedForeground }]}>Decline</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.acceptBtn, { backgroundColor: checked ? colors.primary : colors.muted }]}
-            onPress={handleAccept}
-            disabled={!checked}
-            activeOpacity={0.8}
-          >
-            <Text style={[s.acceptBtnText, { color: checked ? colors.primaryForeground : colors.mutedForeground }]}>
-              I Agree &amp; Continue
-            </Text>
-          </TouchableOpacity>
+          {readOnly ? (
+            <TouchableOpacity
+              style={[s.acceptBtn, { backgroundColor: colors.primary }]}
+              onPress={handleDecline}
+              activeOpacity={0.8}
+              testID="disclaimer-close-button"
+            >
+              <Text style={[s.acceptBtnText, { color: colors.primaryForeground }]}>Close</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity style={[s.declineBtn, { borderColor: colors.border }]} onPress={handleDecline}>
+                <Text style={[s.declineBtnText, { color: colors.mutedForeground }]}>Decline</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.acceptBtn, { backgroundColor: checked ? colors.primary : colors.muted }]}
+                onPress={handleAccept}
+                disabled={!checked}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.acceptBtnText, { color: checked ? colors.primaryForeground : colors.mutedForeground }]}>
+                  I Agree &amp; Continue
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     </Modal>

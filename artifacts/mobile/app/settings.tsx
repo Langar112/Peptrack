@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
+import { DisclaimerModal } from '@/components/DisclaimerModal';
 
 export default function SettingsScreen() {
   const colors = useColors();
@@ -24,6 +25,7 @@ export default function SettingsScreen() {
   const { user, logout, updateUser, isAuthenticated } = useAuth();
   const topPad = Platform.OS === 'web' ? 20 : insets.top;
   const [isSaving, setIsSaving] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
 
   const handleThemeChange = async (theme: string) => {
     if (!user) return;
@@ -204,10 +206,14 @@ export default function SettingsScreen() {
         <View style={s.section}>
           <Text style={s.sectionTitle}>Legal</Text>
           <View style={s.card}>
-            <TouchableOpacity style={s.cardRow}>
+            <TouchableOpacity
+              style={s.cardRow}
+              onPress={() => setShowDisclaimer(true)}
+              testID="safety-disclaimer-row"
+            >
               <View style={s.rowLeft}>
                 <Feather name="shield" size={18} color={colors.mutedForeground} />
-                <Text style={s.rowLabel}>Medical Disclaimer</Text>
+                <Text style={s.rowLabel}>Safety Disclaimer</Text>
               </View>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>
@@ -252,6 +258,12 @@ export default function SettingsScreen() {
           </View>
         )}
       </ScrollView>
+
+      <DisclaimerModal
+        visible={showDisclaimer}
+        readOnly
+        onDecline={() => setShowDisclaimer(false)}
+      />
     </View>
   );
 }
