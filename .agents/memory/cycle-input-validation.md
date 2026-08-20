@@ -1,10 +1,10 @@
 ---
 name: Cycle input validation
-description: Data-integrity rule for saving reconstitution cycles.
+description: Data-integrity rule for saving optional reconstitution details on calendar cycles.
 ---
 
-Cycle creation must validate all required reconstitution and dose values as positive numbers in the mobile form and again at the API boundary. Never coerce missing numeric values into strings for database writes.
+Calendar-created cycles require a compound name, a positive dose, and an injection frequency. Vial amount, BAC water, calculated volume, and syringe units are optional; blank values are normalized to zero before storage.
 
-**Why:** Incomplete fields otherwise reach PostgreSQL as the literal string `undefined`, producing an opaque save failure instead of telling the user what to complete.
+**Why:** Users may track cycles without reconstitution details. Missing optional numeric fields must not reach PostgreSQL as the literal string `undefined`, which causes an opaque save failure.
 
-**How to apply:** Keep the mobile form's visible error state and the API's 400-level validation aligned whenever cycle fields or creation paths change.
+**How to apply:** Keep the mobile form and API validation aligned: require only the three essential fields, validate any optional numeric value if supplied, and persist absent optional values as zero.

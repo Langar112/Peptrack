@@ -148,17 +148,23 @@ export default function AddCycleScreen() {
 
   const validate = (): string | null => {
     if (!peptideName.trim()) return 'Enter the peptide or compound name.';
-    const requiredNumbers = [
+    const dose = Number.parseFloat(desiredDose);
+    if (!Number.isFinite(dose) || dose <= 0) {
+      return 'Enter a valid desired dose before saving this cycle.';
+    }
+    if (!freqType) return 'Select an injection frequency before saving this cycle.';
+
+    const optionalNumbers = [
       { label: 'vial amount', value: vialAmount },
       { label: 'BAC water amount', value: bacWater },
-      { label: 'desired dose', value: desiredDose },
       { label: 'calculated volume', value: calculatedVolumeMl },
       { label: 'calculated syringe units', value: calculatedSyringeUnits },
     ];
 
-    for (const field of requiredNumbers) {
+    for (const field of optionalNumbers) {
+      if (!field.value.trim()) continue;
       const value = Number.parseFloat(field.value);
-      if (!Number.isFinite(value) || value <= 0) {
+      if (!Number.isFinite(value) || value < 0) {
         return `Enter a valid ${field.label} before saving this cycle.`;
       }
     }
@@ -178,16 +184,20 @@ export default function AddCycleScreen() {
     setIsSaving(true);
     try {
       const scheduleRule = buildScheduleRule();
+      const optionalNumber = (value: string) => {
+        const parsed = Number.parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
       const payload: CreateCycleInput = {
         customCompoundName: peptideName.trim(),
         cycleName: cycleName.trim() || undefined,
-        vialAmount: Number.parseFloat(vialAmount),
+        vialAmount: optionalNumber(vialAmount),
         vialUnit,
-        bacWaterMl: Number.parseFloat(bacWater),
+        bacWaterMl: optionalNumber(bacWater),
         desiredDose: Number.parseFloat(desiredDose),
         doseUnit,
-        calculatedVolumeMl: Number.parseFloat(calculatedVolumeMl),
-        calculatedSyringeUnits: Number.parseFloat(calculatedSyringeUnits),
+        calculatedVolumeMl: optionalNumber(calculatedVolumeMl),
+        calculatedSyringeUnits: optionalNumber(calculatedSyringeUnits),
         syringeCapacityMl: Number.parseFloat(syringeSize) || 1.0,
         startDate,
         endDate: computedEndDate || undefined,
@@ -305,7 +315,7 @@ export default function AddCycleScreen() {
         </View>
 
         <View style={s.field}>
-          <Text style={s.label}>Vial Amount *</Text>
+          <Text style={s.label}>Vial Amount</Text>
           <View style={s.inputRow}>
             <TextInput style={[s.input, { flex: 1 }]} value={vialAmount} onChangeText={setVialAmount} placeholder="e.g. 5" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
             <TouchableOpacity style={s.unitPill} onPress={() => setUnitDropdown('vial')}>
@@ -316,7 +326,7 @@ export default function AddCycleScreen() {
         </View>
 
         <View style={s.field}>
-          <Text style={s.label}>BAC Water (mL) *</Text>
+          <Text style={s.label}>BAC Water (mL)</Text>
           <TextInput style={s.input} value={bacWater} onChangeText={setBacWater} placeholder="e.g. 2" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
         </View>
 
@@ -333,11 +343,11 @@ export default function AddCycleScreen() {
 
         <View style={s.row}>
           <View style={[s.field, { flex: 1, marginRight: 8 }]}>
-            <Text style={s.label}>Volume (mL) *</Text>
+          <Text style={s.label}>Volume (mL)</Text>
             <TextInput style={s.input} value={calculatedVolumeMl} onChangeText={setCalculatedVolumeMl} placeholder="Auto" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
           </View>
           <View style={[s.field, { flex: 1 }]}>
-            <Text style={s.label}>Syringe Units *</Text>
+          <Text style={s.label}>Syringe Units</Text>
             <TextInput style={s.input} value={calculatedSyringeUnits} onChangeText={setCalculatedSyringeUnits} placeholder="Auto" placeholderTextColor={colors.mutedForeground} keyboardType="decimal-pad" />
           </View>
         </View>
@@ -396,7 +406,7 @@ export default function AddCycleScreen() {
         </View>
 
         {/* ── Frequency ── */}
-        <Text style={s.sectionHeader}>Frequency</Text>
+         <Text style={s.sectionHeader}>Frequency *</Text>
 
         <View style={s.field}>
           {([
@@ -565,7 +575,12 @@ export default function AddCycleScreen() {
               { label: 'Compound', value: peptideName },
               { label: 'Dose', value: `${desiredDose} ${doseUnit}` },
               { label: 'Syringe Units', value: calculatedSyringeUnits ? `${parseFloat(calculatedSyringeUnits).toFixed(1)} units` : '—' },
-              { label: 'Vial', value: `${vialAmount} ${vialUnit} / ${bacWater} mL BAC water` },
+               {
+                 label: 'Vial',
+                 value: vialAmount || bacWater
+                   ? `${vialAmount || '—'} ${vialUnit} / ${bacWater || '—'} mL BAC water`
+                   : 'Not provided',
+               },
               { label: 'Start Date', value: startDate },
               { label: 'End Date', value: durationType === 'ongoing' ? 'Ongoing' : computedEndDate ?? '—' },
               { label: 'Schedule', value: freqType === 'daily' ? 'Every day' : freqType === 'specific_days' ? selectedDays.join(', ') : freqType === 'times_per_week' ? `${timesPerWeek}x/week (${selectedDays.join(', ')})` : `Every ${intervalDays} days` },

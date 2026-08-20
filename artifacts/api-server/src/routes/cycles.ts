@@ -60,21 +60,43 @@ router.post("/", async (req: AuthRequest, res) => {
       scheduleRule,
     } = req.body ?? {};
 
-    const requiredPositiveNumbers = [
+    if (!String(customCompoundName ?? "").trim()) {
+      res.status(400).json({ error: "Enter the peptide or compound name before saving this cycle." });
+      return;
+    }
+
+    const desiredDoseNumber = Number(desiredDose);
+    if (!Number.isFinite(desiredDoseNumber) || desiredDoseNumber <= 0) {
+      res.status(400).json({ error: "Enter a valid desired dose before saving this cycle." });
+      return;
+    }
+
+    if (!scheduleRule?.frequencyType) {
+      res.status(400).json({ error: "Select an injection frequency before saving this cycle." });
+      return;
+    }
+
+    const optionalNumbers = [
       ["vial amount", vialAmount],
       ["BAC water amount", bacWaterMl],
-      ["desired dose", desiredDose],
       ["calculated volume", calculatedVolumeMl],
       ["calculated syringe units", calculatedSyringeUnits],
     ] as const;
-
-    for (const [label, value] of requiredPositiveNumbers) {
+    const normalizedOptionalNumbers = optionalNumbers.map(([label, value]) => {
+      if (value === undefined || value === null || value === "") return 0;
       const numericValue = Number(value);
-      if (!Number.isFinite(numericValue) || numericValue <= 0) {
+      if (!Number.isFinite(numericValue) || numericValue < 0) {
         res.status(400).json({ error: `Enter a valid ${label} before saving this cycle.` });
-        return;
+        return null;
       }
+      return numericValue;
+    });
+
+    if (normalizedOptionalNumbers.some((value) => value === null)) {
+      return;
     }
+    const [vialAmountNumber, bacWaterMlNumber, calculatedVolumeMlNumber, calculatedSyringeUnitsNumber] =
+      normalizedOptionalNumbers as number[];
 
     const [cycle] = await db
       .insert(cyclesTable)
@@ -83,13 +105,13 @@ router.post("/", async (req: AuthRequest, res) => {
         peptideCatalogId: peptideCatalogId ?? null,
         customCompoundName: customCompoundName ?? null,
         cycleName: cycleName ?? null,
-        vialAmount: String(vialAmount),
-        vialUnit,
-        bacWaterMl: String(bacWaterMl),
-        desiredDose: String(desiredDose),
-        doseUnit,
-        calculatedVolumeMl: String(calculatedVolumeMl),
-        calculatedSyringeUnits: String(calculatedSyringeUnits),
+        vialAmount: String(vialAmountNumber),
+        vialUnit: vialUnit ?? "mg",
+        bacWaterMl: String(bacWaterMlNumber),
+        desiredDose: String(desiredDoseNumber),
+        doseUnit: doseUnit ?? "mcg",
+        calculatedVolumeMl: String(calculatedVolumeMlNumber),
+        calculatedSyringeUnits: String(calculatedSyringeUnitsNumber),
         syringeCapacityMl: String(syringeCapacityMl ?? "1.0"),
         startDate,
         endDate: endDate ?? null,
