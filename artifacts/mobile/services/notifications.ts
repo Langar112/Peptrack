@@ -8,18 +8,29 @@
 
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
 type NotificationsModule = typeof import('expo-notifications');
 let notificationsModule: NotificationsModule | null | undefined;
 
 /**
- * Expo Go on Android can throw while loading expo-notifications because
- * remote push notifications are not supported there. Keep notifications
- * optional so the rest of the app remains usable.
+ * Expo Go on Android removed remote push notification support in SDK 53.
+ * The module logs an ERROR at load time in that environment, so skip the
+ * import entirely when running inside Expo Go. Local notification scheduling
+ * (dose reminders) continues to work in development builds and production.
  */
 async function getNotifications(): Promise<NotificationsModule | null> {
   if (Platform.OS === 'web') return null;
   if (notificationsModule !== undefined) return notificationsModule;
+
+  // Guard: expo-notifications triggers DevicePushTokenAutoRegistration on load,
+  // which throws on Android Expo Go. Bail out before the import to keep the
+  // app error-free in that environment.
+  const isExpoGo = Constants.appOwnership === 'expo';
+  if (isExpoGo && Platform.OS === 'android') {
+    notificationsModule = null;
+    return null;
+  }
 
   try {
     const Notifications = await import('expo-notifications');
