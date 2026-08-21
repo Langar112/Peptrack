@@ -265,7 +265,7 @@ router.get("/:id", async (req: AuthRequest, res) => {
     const [cycle] = await db
       .select()
       .from(cyclesTable)
-      .where(and(eq(cyclesTable.id, req.params.id), eq(cyclesTable.userId, req.user!.userId)))
+      .where(and(eq(cyclesTable.id, (req.params.id as string)), eq(cyclesTable.userId, req.user!.userId)))
       .limit(1);
 
     if (!cycle) {
@@ -306,7 +306,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     const [existing] = await db
       .select()
       .from(cyclesTable)
-      .where(and(eq(cyclesTable.id, req.params.id), eq(cyclesTable.userId, req.user!.userId)))
+      .where(and(eq(cyclesTable.id, (req.params.id as string)), eq(cyclesTable.userId, req.user!.userId)))
       .limit(1);
 
     if (!existing) {
@@ -317,7 +317,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     const [existingRule] = await db
       .select()
       .from(scheduleRulesTable)
-      .where(eq(scheduleRulesTable.cycleId, req.params.id))
+      .where(eq(scheduleRulesTable.cycleId, (req.params.id as string)))
       .limit(1);
 
     const { applyFrom, scheduleRule, ...cycleFields } = req.body ?? {};
@@ -424,7 +424,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
       const [updated] = await tx
         .update(cyclesTable)
         .set(updates)
-        .where(eq(cyclesTable.id, req.params.id))
+        .where(eq(cyclesTable.id, (req.params.id as string)))
         .returning();
 
       let rule = existingRule ?? null;
@@ -447,7 +447,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
         } else {
           const [createdRule] = await tx
             .insert(scheduleRulesTable)
-            .values({ cycleId: req.params.id, ...ruleValues })
+            .values({ cycleId: (req.params.id as string), ...ruleValues })
             .returning();
           rule = createdRule;
         }
@@ -482,7 +482,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
         regenerationFrom.setHours(0, 0, 0, 0);
         await tx.delete(injectionEventsTable).where(
           and(
-            eq(injectionEventsTable.cycleId, req.params.id),
+            eq(injectionEventsTable.cycleId, (req.params.id as string)),
             eq(injectionEventsTable.status, "scheduled"),
             gte(injectionEventsTable.scheduledAt, regenerationFrom)
           )
@@ -515,7 +515,7 @@ router.delete("/:id", async (req: AuthRequest, res) => {
     const [existing] = await db
       .select({ id: cyclesTable.id })
       .from(cyclesTable)
-      .where(and(eq(cyclesTable.id, req.params.id), eq(cyclesTable.userId, req.user!.userId)))
+      .where(and(eq(cyclesTable.id, (req.params.id as string)), eq(cyclesTable.userId, req.user!.userId)))
       .limit(1);
 
     if (!existing) {
@@ -523,7 +523,7 @@ router.delete("/:id", async (req: AuthRequest, res) => {
       return;
     }
 
-    await db.delete(cyclesTable).where(eq(cyclesTable.id, req.params.id));
+    await db.delete(cyclesTable).where(eq(cyclesTable.id, (req.params.id as string)));
     res.json({ success: true });
   } catch (err) {
     console.error("Delete cycle error:", err);
@@ -537,7 +537,7 @@ router.post("/:id/archive", async (req: AuthRequest, res) => {
     const [updated] = await db
       .update(cyclesTable)
       .set({ status: "archived", updatedAt: new Date() })
-      .where(and(eq(cyclesTable.id, req.params.id), eq(cyclesTable.userId, req.user!.userId)))
+      .where(and(eq(cyclesTable.id, (req.params.id as string)), eq(cyclesTable.userId, req.user!.userId)))
       .returning();
     if (!updated) { res.status(404).json({ error: "Cycle not found" }); return; }
     res.json({ cycle: updated });
@@ -552,7 +552,7 @@ router.post("/:id/pause", async (req: AuthRequest, res) => {
     const [updated] = await db
       .update(cyclesTable)
       .set({ status: "paused", updatedAt: new Date() })
-      .where(and(eq(cyclesTable.id, req.params.id), eq(cyclesTable.userId, req.user!.userId)))
+      .where(and(eq(cyclesTable.id, (req.params.id as string)), eq(cyclesTable.userId, req.user!.userId)))
       .returning();
     if (!updated) { res.status(404).json({ error: "Cycle not found" }); return; }
     res.json({ cycle: updated });
@@ -567,7 +567,7 @@ router.post("/:id/resume", async (req: AuthRequest, res) => {
     const [updated] = await db
       .update(cyclesTable)
       .set({ status: "active", updatedAt: new Date() })
-      .where(and(eq(cyclesTable.id, req.params.id), eq(cyclesTable.userId, req.user!.userId)))
+      .where(and(eq(cyclesTable.id, (req.params.id as string)), eq(cyclesTable.userId, req.user!.userId)))
       .returning();
     if (!updated) { res.status(404).json({ error: "Cycle not found" }); return; }
     res.json({ cycle: updated });

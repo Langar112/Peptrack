@@ -75,7 +75,7 @@ router.patch("/:id/complete", async (req: AuthRequest, res) => {
     const [event] = await db
       .select()
       .from(injectionEventsTable)
-      .where(and(eq(injectionEventsTable.id, req.params.id), eq(injectionEventsTable.userId, req.user!.userId)))
+      .where(and(eq(injectionEventsTable.id, (req.params.id as string)), eq(injectionEventsTable.userId, req.user!.userId)))
       .limit(1);
 
     if (!event) { res.status(404).json({ error: "Event not found" }); return; }
@@ -93,7 +93,7 @@ router.patch("/:id/complete", async (req: AuthRequest, res) => {
         completedAt: completedAt ? new Date(completedAt) : new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(injectionEventsTable.id, req.params.id))
+      .where(eq(injectionEventsTable.id, (req.params.id as string)))
       .returning();
 
     res.json({ event: updated });
@@ -109,7 +109,7 @@ router.patch("/:id/skip", async (req: AuthRequest, res) => {
     const [event] = await db
       .select({ id: injectionEventsTable.id })
       .from(injectionEventsTable)
-      .where(and(eq(injectionEventsTable.id, req.params.id), eq(injectionEventsTable.userId, req.user!.userId)))
+      .where(and(eq(injectionEventsTable.id, (req.params.id as string)), eq(injectionEventsTable.userId, req.user!.userId)))
       .limit(1);
 
     if (!event) { res.status(404).json({ error: "Event not found" }); return; }
@@ -118,7 +118,7 @@ router.patch("/:id/skip", async (req: AuthRequest, res) => {
     const [updated] = await db
       .update(injectionEventsTable)
       .set({ status: "skipped", note: note ?? null, updatedAt: new Date() })
-      .where(eq(injectionEventsTable.id, req.params.id))
+      .where(eq(injectionEventsTable.id, (req.params.id as string)))
       .returning();
 
     res.json({ event: updated });
@@ -134,7 +134,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     const [event] = await db
       .select({ id: injectionEventsTable.id })
       .from(injectionEventsTable)
-      .where(and(eq(injectionEventsTable.id, req.params.id), eq(injectionEventsTable.userId, req.user!.userId)))
+      .where(and(eq(injectionEventsTable.id, (req.params.id as string)), eq(injectionEventsTable.userId, req.user!.userId)))
       .limit(1);
 
     if (!event) { res.status(404).json({ error: "Event not found" }); return; }
@@ -148,7 +148,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     const [updated] = await db
       .update(injectionEventsTable)
       .set(updates)
-      .where(eq(injectionEventsTable.id, req.params.id))
+      .where(eq(injectionEventsTable.id, (req.params.id as string)))
       .returning();
 
     res.json({ event: updated });

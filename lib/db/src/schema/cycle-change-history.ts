@@ -1,6 +1,5 @@
 import { pgTable, uuid, text, date, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 import { cyclesTable } from "./cycles";
 import { usersTable } from "./users";
 
@@ -19,5 +18,4 @@ export const insertCycleChangeHistorySchema = createInsertSchema(cycleChangeHist
   id: true,
   createdAt: true,
 });
-export type InsertCycleChangeHistory = z.infer<typeof insertCycleChangeHistorySchema>;
 export type CycleChangeHistory = typeof cycleChangeHistoryTable.$inferSelect;

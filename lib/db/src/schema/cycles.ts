@@ -1,6 +1,5 @@
 import { pgTable, uuid, text, numeric, boolean, date, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 import { usersTable } from "./users";
 import { peptideCatalogTable } from "./peptide-catalog";
 
@@ -33,5 +32,4 @@ export const insertCycleSchema = createInsertSchema(cyclesTable).omit({
   createdAt: true,
   updatedAt: true,
 });
-export type InsertCycle = z.infer<typeof insertCycleSchema>;
 export type Cycle = typeof cyclesTable.$inferSelect;

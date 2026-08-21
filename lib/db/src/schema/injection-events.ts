@@ -1,6 +1,5 @@
 import { pgTable, uuid, text, numeric, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 import { usersTable } from "./users";
 import { cyclesTable } from "./cycles";
 
@@ -31,5 +30,4 @@ export const insertInjectionEventSchema = createInsertSchema(injectionEventsTabl
   createdAt: true,
   updatedAt: true,
 });
-export type InsertInjectionEvent = z.infer<typeof insertInjectionEventSchema>;
 export type InjectionEvent = typeof injectionEventsTable.$inferSelect;

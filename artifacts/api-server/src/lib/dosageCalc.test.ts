@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateDosage, toMcg } from '../../../mobile/services/dosageCalc';
+import { calculateDosage, toMcg } from './dosageCalc';
 
 // ─── Unit conversion ──────────────────────────────────────────────────────────
 describe('toMcg', () => {

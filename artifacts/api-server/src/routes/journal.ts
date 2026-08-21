@@ -135,7 +135,7 @@ router.get("/:id", async (req: AuthRequest, res) => {
     const [entry] = await db
       .select()
       .from(journalEntriesTable)
-      .where(and(eq(journalEntriesTable.id, req.params.id), eq(journalEntriesTable.userId, req.user!.userId)))
+      .where(and(eq(journalEntriesTable.id, (req.params.id as string)), eq(journalEntriesTable.userId, req.user!.userId)))
       .limit(1);
 
     if (!entry) { res.status(404).json({ error: "Entry not found" }); return; }
@@ -151,7 +151,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     const [existing] = await db
       .select({ id: journalEntriesTable.id, entryType: journalEntriesTable.entryType })
       .from(journalEntriesTable)
-      .where(and(eq(journalEntriesTable.id, req.params.id), eq(journalEntriesTable.userId, req.user!.userId)))
+      .where(and(eq(journalEntriesTable.id, (req.params.id as string)), eq(journalEntriesTable.userId, req.user!.userId)))
       .limit(1);
 
     if (!existing) { res.status(404).json({ error: "Entry not found" }); return; }
@@ -194,7 +194,7 @@ router.patch("/:id", async (req: AuthRequest, res) => {
     const [updated] = await db
       .update(journalEntriesTable)
       .set(updates)
-      .where(eq(journalEntriesTable.id, req.params.id))
+      .where(eq(journalEntriesTable.id, (req.params.id as string)))
       .returning();
 
     res.json({ entry: updated });
@@ -209,7 +209,7 @@ router.delete("/:id", async (req: AuthRequest, res) => {
     const [existing] = await db
       .select({ id: journalEntriesTable.id, entryType: journalEntriesTable.entryType })
       .from(journalEntriesTable)
-      .where(and(eq(journalEntriesTable.id, req.params.id), eq(journalEntriesTable.userId, req.user!.userId)))
+      .where(and(eq(journalEntriesTable.id, (req.params.id as string)), eq(journalEntriesTable.userId, req.user!.userId)))
       .limit(1);
 
     if (!existing) { res.status(404).json({ error: "Entry not found" }); return; }
@@ -218,7 +218,7 @@ router.delete("/:id", async (req: AuthRequest, res) => {
       return;
     }
 
-    await db.delete(journalEntriesTable).where(eq(journalEntriesTable.id, req.params.id));
+    await db.delete(journalEntriesTable).where(eq(journalEntriesTable.id, (req.params.id as string)));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Failed to delete entry" });

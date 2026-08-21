@@ -1,6 +1,5 @@
 import { pgTable, uuid, text, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 import { cyclesTable } from "./cycles";
 
 export const scheduleRulesTable = pgTable("schedule_rules", {
@@ -23,5 +22,4 @@ export const insertScheduleRuleSchema = createInsertSchema(scheduleRulesTable).o
   createdAt: true,
   updatedAt: true,
 });
-export type InsertScheduleRule = z.infer<typeof insertScheduleRuleSchema>;
 export type ScheduleRule = typeof scheduleRulesTable.$inferSelect;
