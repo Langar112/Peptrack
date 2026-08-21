@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateDosage, toMcg } from './dosageCalc';
+import { calculateDosage, toMcg } from '@workspace/dosage-calc';
 
 // ─── Unit conversion ──────────────────────────────────────────────────────────
 describe('toMcg', () => {
@@ -153,7 +153,7 @@ describe('calculateDosage — warnings', () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.result.syringeUnits).toBeCloseTo(60, 3);
-      expect(r.result.warnings.some((w) => w.includes('50'))).toBe(true);
+      expect(r.result.warnings.some((w: string) => w.includes('50'))).toBe(true);
     }
   });
 
@@ -163,7 +163,7 @@ describe('calculateDosage — warnings', () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.result.syringeUnits).toBeLessThan(1);
-      expect(r.result.warnings.some((w) => w.includes('below 1'))).toBe(true);
+      expect(r.result.warnings.some((w: string) => w.includes('below 1'))).toBe(true);
     }
   });
 
@@ -175,7 +175,7 @@ describe('calculateDosage — warnings', () => {
     if (r.ok) {
       expect(r.result.syringeUnits).toBeGreaterThanOrEqual(1);
       expect(r.result.syringeUnits).toBeLessThan(2);
-      expect(r.result.warnings.some((w) => w.includes('difficult'))).toBe(true);
+      expect(r.result.warnings.some((w: string) => w.includes('difficult'))).toBe(true);
     }
   });
 });

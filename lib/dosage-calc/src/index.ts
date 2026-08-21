@@ -1,6 +1,6 @@
 /**
- * dosageCalc.ts — Pure dosage calculation logic for peptide reconstitution.
- * No React or platform dependencies; safe to import in tests.
+ * dosage-calc — Pure dosage calculation logic for peptide reconstitution.
+ * No React or platform dependencies; safe to import in tests and server code.
  */
 
 export type VialUnit = 'mg' | 'mcg' | 'IU';
