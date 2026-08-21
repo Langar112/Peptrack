@@ -1,7 +1,7 @@
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 
@@ -558,10 +558,37 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
   console.log('Manifests updated');
 }
 
+function runSmokeCheck() {
+  console.log('Running web smoke check before build...');
+  const smokeCheckPath = path.join(__dirname, 'smoke-check.js');
+  const result = spawnSync(process.execPath, [smokeCheckPath], {
+    stdio: 'inherit',
+    cwd: projectRoot,
+    env: process.env,
+  });
+
+  if (result.error) {
+    console.error(`\nSmoke check could not be started: ${result.error.message}`);
+    console.error('Aborting build.');
+    process.exit(1);
+  }
+
+  if (result.status !== 0) {
+    console.error('\nSmoke check failed — build aborted.');
+    console.error(
+      'Fix the issues reported above, then re-run the build.',
+    );
+    process.exit(result.status ?? 1);
+  }
+
+  console.log('Smoke check passed — proceeding with build.\n');
+}
+
 async function main() {
   console.log('Building static Expo Go deployment...');
 
   setupSignalHandlers();
+  runSmokeCheck();
 
   const domain = getDeploymentDomain();
   const expoPublicReplId = getExpoPublicReplId();
