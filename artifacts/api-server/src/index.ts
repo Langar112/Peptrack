@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { runStartupMigrations } from "./lib/startup-migrations.js";
 
 const rawPort = process.env["PORT"];
 
@@ -14,6 +15,9 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+// Apply any pending schema migrations before accepting traffic.
+await runStartupMigrations();
 
 app.listen(port, (err) => {
   if (err) {
