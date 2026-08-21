@@ -1,10 +1,10 @@
 ---
 name: Metro image-size compatibility
-description: Why Expo SDK 54 asset bundling needs a preload adapter with image-size 2.
+description: Expo SDK 54 Metro must retain its compatible image-size 1.x dependency.
 ---
 
-When the workspace forces `image-size` 2.x, Expo SDK 54's Metro asset pipeline must start with the image-size compatibility preload enabled. The adapter must be loaded through `NODE_OPTIONS` so it is present in Metro's separate transform-worker processes as well as the parent bundler.
+Expo SDK 54's Metro 0.83.3 asset pipeline expects `image-size` 1.x, currently 1.2.1. Do not add a workspace-wide override that forces image-size 2.x onto Metro.
 
-**Why:** Metro 0.83 supplies asset file paths, while image-size 2.x expects binary input. A configuration-only in-memory patch does not cross the worker-process boundary, causing blank previews and bundle HTTP 500 responses.
+**Why:** Metro 0.83.3 supplies asset file paths in the form expected by image-size 1.x. image-size 2.x rejects those paths with a SharedArrayBuffer/ArrayBuffer type error during iOS asset processing.
 
-**How to apply:** Preserve the preload in every process that starts Metro or exports a web/native bundle, including development, standalone builds, and verification commands. Re-evaluate and remove it only after the installed Metro version natively supports image-size 2.x path inputs.
+**How to apply:** Keep the workspace override absent, regenerate the lockfile after dependency changes, and verify Metro's nested dependency with `pnpm why image-size` before Expo exports.
