@@ -26,7 +26,11 @@ async function getNotifications(): Promise<NotificationsModule | null> {
   // Guard: expo-notifications triggers DevicePushTokenAutoRegistration on load,
   // which throws on Android Expo Go. Bail out before the import to keep the
   // app error-free in that environment.
-  const isExpoGo = Constants.appOwnership === 'expo';
+  //
+  // Constants.executionEnvironment is the supported detection API (appOwnership
+  // is deprecated). In Expo Go the value is 'storeClient'; EAS development and
+  // production builds both report 'bare'.
+  const isExpoGo = Constants.executionEnvironment === 'storeClient';
   if (isExpoGo && Platform.OS === 'android') {
     notificationsModule = null;
     return null;
