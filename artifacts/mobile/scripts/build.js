@@ -584,10 +584,51 @@ function runSmokeCheck() {
   console.log('Smoke check passed — proceeding with build.\n');
 }
 
+function runExpoSdkCheck() {
+  console.log('Checking Expo SDK package compatibility...');
+  const result = spawnSync(
+    'pnpm',
+    ['--filter', '@workspace/mobile', 'exec', 'expo', 'install', '--check'],
+    {
+      cwd: workspaceRoot,
+      env: process.env,
+      encoding: 'utf8',
+    },
+  );
+
+  const output = [result.stdout, result.stderr]
+    .filter(Boolean)
+    .map((stream) => stream.toString())
+    .join('');
+
+  if (output) {
+    process.stdout.write(output);
+  }
+
+  if (result.error) {
+    console.error(
+      `\nExpo SDK compatibility check could not be started: ${result.error.message}`,
+    );
+    console.error('Build aborted before native compilation.');
+    process.exit(1);
+  }
+
+  if (result.status !== 0) {
+    console.error(
+      '\nExpo SDK compatibility check failed. The incompatible packages are listed above. ' +
+        'Update them to the versions required by Expo, then re-run the build.',
+    );
+    process.exit(result.status ?? 1);
+  }
+
+  console.log('Expo SDK compatibility check passed — proceeding with build.\n');
+}
+
 async function main() {
   console.log('Building static Expo Go deployment...');
 
   setupSignalHandlers();
+  runExpoSdkCheck();
   runSmokeCheck();
 
   const domain = getDeploymentDomain();
