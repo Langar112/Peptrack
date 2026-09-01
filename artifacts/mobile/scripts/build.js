@@ -6,6 +6,7 @@ const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 const {
   checkWebRoutes,
+  isBundleErrorEnvelope,
   printSmokeCheckResult,
 } = require('./smoke-check');
 
@@ -355,6 +356,41 @@ async function downloadBundlesAndManifests(timestamp) {
   }
 }
 
+function checkDownloadedBundles(timestamp) {
+  const bundlePaths = ['ios', 'android'].map((platform) =>
+    path.join(
+      projectRoot,
+      'static-build',
+      timestamp,
+      '_expo',
+      'static',
+      'js',
+      platform,
+      'bundle.js',
+    ),
+  );
+
+  for (const bundlePath of bundlePaths) {
+    const bundle = fs.readFileSync(bundlePath, 'utf-8');
+    if (!isBundleErrorEnvelope(bundle)) {
+      continue;
+    }
+
+    let detail = '';
+    try {
+      detail = JSON.parse(bundle.trimStart())?.errors?.[0]?.description || '';
+    } catch {
+      // isBundleErrorEnvelope already confirmed the response is valid JSON.
+    }
+
+    const relativePath = path.relative(workspaceRoot, bundlePath);
+    throw new Error(
+      `Production bundle is a Metro error envelope: ${relativePath}` +
+        (detail ? `: ${detail}` : ''),
+    );
+  }
+}
+
 function extractAssets(timestamp) {
   const staticBuild = path.join(projectRoot, 'static-build');
   const bundles = {
@@ -660,6 +696,8 @@ async function main() {
   });
 
   const manifests = await Promise.race([downloadPromise, timeoutPromise]);
+
+  checkDownloadedBundles(timestamp);
 
   console.log('Processing assets...');
   const assets = extractAssets(timestamp);
