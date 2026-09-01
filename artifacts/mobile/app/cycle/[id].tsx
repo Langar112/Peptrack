@@ -49,6 +49,10 @@ function freqLabel(cycle: CycleWithRule): string {
   return rule.frequencyType;
 }
 
+function formatQuantity(value: number): string {
+  return value.toFixed(2).replace(/\.?0+$/, '');
+}
+
 export default function CycleDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -204,6 +208,30 @@ export default function CycleDetailScreen() {
             <InfoRow label="Volume" value={`${parseFloat(cycle.calculatedVolumeMl).toFixed(3)} mL`} colors={colors} />
             <InfoRow label="Syringe" value={`${parseFloat(cycle.syringeCapacityMl) === 0.5 ? '0.5' : '1.0'} mL U-100`} colors={colors} last />
           </View>
+          <View style={[s.remainingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[s.remainingIcon, { backgroundColor: cycleColor + '18' }]}>
+              <Feather name="droplet" size={18} color={cycleColor} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.remainingLabel, { color: colors.mutedForeground }]}>Doses left in vial</Text>
+              {cycle.vialTracking ? (
+                <>
+                  <Text style={[s.remainingValue, { color: colors.foreground }]}>
+                    {cycle.vialTracking.remainingDoses} {cycle.vialTracking.remainingDoses === 1 ? 'dose' : 'doses'}
+                  </Text>
+                  <Text style={[s.remainingHint, { color: colors.mutedForeground }]}>
+                    {formatQuantity(cycle.vialTracking.remainingAmount)} {cycle.vialTracking.remainingAmountUnit} remaining
+                    {' · '}
+                    {formatQuantity(cycle.vialTracking.usedDoses)} of {formatQuantity(cycle.vialTracking.totalDoses)} used
+                  </Text>
+                </>
+              ) : (
+                <Text style={[s.remainingHint, { color: colors.mutedForeground }]}>
+                  Add a valid vial strength and dose to track remaining doses.
+                </Text>
+              )}
+            </View>
+          </View>
         </View>
 
         {/* Actions */}
@@ -270,5 +298,10 @@ function makeStyles(colors: ReturnType<typeof useColors>) {
     sectionTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
     card: { backgroundColor: colors.card, borderRadius: colors.radius, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
     name: { fontSize: 22, fontFamily: 'Inter_700Bold', color: colors.foreground, letterSpacing: -0.3 },
+    remainingCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12, padding: 16, borderRadius: colors.radius, borderWidth: 1 },
+    remainingIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+    remainingLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textTransform: 'uppercase', letterSpacing: 0.6 },
+    remainingValue: { fontSize: 23, fontFamily: 'Inter_700Bold', marginTop: 3 },
+    remainingHint: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 3 },
   });
 }

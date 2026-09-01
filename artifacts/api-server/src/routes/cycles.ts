@@ -3,6 +3,7 @@ import { eq, and, desc, gte, inArray } from "drizzle-orm";
 import { db, cyclesTable, scheduleRulesTable, injectionEventsTable, journalEntriesTable, cycleChangeHistoryTable, peptideCatalogTable } from "@workspace/db";
 import { requireAuth, AuthRequest } from "../lib/auth.js";
 import { generateInjectionEvents } from "../lib/schedule.js";
+import { calculateVialTracking } from "../lib/vial-tracking.js";
 
 const router = Router();
 router.use(requireAuth as any);
@@ -126,7 +127,34 @@ router.get("/", async (req: AuthRequest, res) => {
       : [];
 
     const rulesByCycleId = Object.fromEntries(rules.map((r) => [r.cycleId, r]));
-    const result = cycles.map((c) => ({ ...c, scheduleRule: rulesByCycleId[c.id] ?? null }));
+    const completedEvents = cycleIds.length
+      ? await db
+          .select({
+            cycleId: injectionEventsTable.cycleId,
+            actualDose: injectionEventsTable.actualDose,
+            actualDoseUnit: injectionEventsTable.actualDoseUnit,
+            plannedDose: injectionEventsTable.plannedDose,
+            plannedDoseUnit: injectionEventsTable.plannedDoseUnit,
+          })
+          .from(injectionEventsTable)
+          .where(
+            and(
+              eq(injectionEventsTable.status, "completed"),
+              cycleIds.length === 1
+                ? eq(injectionEventsTable.cycleId, cycleIds[0]!)
+                : inArray(injectionEventsTable.cycleId, cycleIds),
+            ),
+          )
+      : [];
+    const completedByCycleId = completedEvents.reduce<Record<string, typeof completedEvents>>((grouped, event) => {
+      (grouped[event.cycleId] ??= []).push(event);
+      return grouped;
+    }, {});
+    const result = cycles.map((c) => ({
+      ...c,
+      scheduleRule: rulesByCycleId[c.id] ?? null,
+      vialTracking: calculateVialTracking(c, completedByCycleId[c.id] ?? []),
+    }));
     res.json({ cycles: result });
   } catch (err) {
     console.error("List cycles error:", err);
@@ -287,11 +315,27 @@ router.get("/:id", async (req: AuthRequest, res) => {
           .limit(1)
       : [];
 
+    const completedEvents = await db
+      .select({
+        actualDose: injectionEventsTable.actualDose,
+        actualDoseUnit: injectionEventsTable.actualDoseUnit,
+        plannedDose: injectionEventsTable.plannedDose,
+        plannedDoseUnit: injectionEventsTable.plannedDoseUnit,
+      })
+      .from(injectionEventsTable)
+      .where(
+        and(
+          eq(injectionEventsTable.cycleId, cycle.id),
+          eq(injectionEventsTable.status, "completed"),
+        ),
+      );
+
     res.json({
       cycle: {
         ...cycle,
         catalogName: catalogCompound?.name ?? null,
         scheduleRule: rule ?? null,
+        vialTracking: calculateVialTracking(cycle, completedEvents),
       },
     });
   } catch (err) {

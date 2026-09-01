@@ -575,6 +575,11 @@ export default function CalendarScreen() {
                         <Text style={{ fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 2 }}>
                           {c.desiredDose} {c.doseUnit} · {c.durationWeeks ? `Week ${weekNum} of ${c.durationWeeks}` : `Week ${Math.max(weekNum, 1)}`}
                         </Text>
+                        {c.vialTracking && (
+                          <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: c.vialTracking.remainingDoses <= 2 ? colors.warning : colors.primary, marginTop: 4 }}>
+                            {c.vialTracking.remainingDoses} {c.vialTracking.remainingDoses === 1 ? 'dose' : 'doses'} left in vial
+                          </Text>
+                        )}
                         <View style={[{ alignSelf: 'flex-start', marginTop: 6, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }, { backgroundColor: c.status === 'paused' ? colors.warning + '20' : colors.success + '20' }]}>
                           <Text style={{ fontSize: 11, fontFamily: 'Inter_600SemiBold', color: c.status === 'paused' ? colors.warning : colors.success }}>{c.status}</Text>
                         </View>

@@ -197,6 +197,15 @@ export interface CycleWithRule {
   createdAt: string;
   updatedAt: string;
   scheduleRule: ScheduleRule | null;
+  vialTracking: VialTracking | null;
+}
+
+export interface VialTracking {
+  totalDoses: number;
+  usedDoses: number;
+  remainingDoses: number;
+  remainingAmount: number;
+  remainingAmountUnit: string;
 }
 
 export interface InjectionEvent {
