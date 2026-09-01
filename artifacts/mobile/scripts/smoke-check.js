@@ -1,10 +1,10 @@
 /**
  * Mobile web smoke check.
  *
- * Starts the Metro dev server in web mode, then loads the web entry point and
- * each of the three main tab routes (Calculator, Calendar, Journal). Exits
- * non-zero if any route returns a non-success HTTP response or if the JS
- * bundle is a Metro error envelope rather than valid application code.
+ * Loads the web entry point and each of the three main tab routes (Calculator,
+ * Calendar, Journal). Exits non-zero if any route returns a non-success HTTP
+ * response or if the JS bundle is a Metro error envelope rather than valid
+ * application code.
  *
  * Usage:
  *   node scripts/smoke-check.js
@@ -111,6 +111,91 @@ function isBundleErrorEnvelope(body) {
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Check the web routes and bundle served by an already-running Metro server.
+ *
+ * Keeping the checks separate from Metro's lifecycle lets the build reuse its
+ * production Metro process instead of starting a second server just for the
+ * smoke check.
+ */
+async function checkWebRoutes(port, baseUrl = `http://localhost:${port}`) {
+  const failures = [];
+  let entryHtml = null;
+
+  // ── 1. Check each tab route ───────────────────────────────────────────────
+  for (const route of ROUTES) {
+    const url = `${baseUrl}${route}`;
+    process.stdout.write(`  GET ${route} … `);
+    try {
+      const { status, ok, body } = await fetchText(url);
+      if (!ok) {
+        console.log(`FAIL (HTTP ${status})`);
+        failures.push(`Route ${route} returned HTTP ${status}`);
+      } else {
+        console.log(`OK (${status})`);
+        if (route === '/') entryHtml = body;
+      }
+    } catch (err) {
+      console.log(`FAIL (${err.message})`);
+      failures.push(`Route ${route} fetch error: ${err.message}`);
+    }
+  }
+
+  // ── 2. Check the JS bundle ────────────────────────────────────────────────
+  const bundleUrl = entryHtml ? extractBundleUrl(entryHtml, baseUrl) : null;
+
+  if (bundleUrl) {
+    process.stdout.write(`\n  GET bundle … `);
+    try {
+      const { status, ok, body } = await fetchText(bundleUrl, 120_000);
+      if (!ok) {
+        console.log(`FAIL (HTTP ${status})`);
+        failures.push(`Bundle returned HTTP ${status}`);
+      } else if (isBundleErrorEnvelope(body)) {
+        // Metro returns {"type":"error",...} when it cannot compile the bundle.
+        console.log(`FAIL (Metro error envelope in bundle response)`);
+        let detail = '';
+        try {
+          detail = JSON.parse(body.trimStart())?.errors?.[0]?.description || '';
+        } catch {
+          /* ignore parse failures */
+        }
+        failures.push(
+          `Bundle is a Metro error envelope${detail ? ': ' + detail : ''}`,
+        );
+      } else {
+        console.log(`OK (${status}, ${(body.length / 1024).toFixed(0)} KB)`);
+      }
+    } catch (err) {
+      console.log(`FAIL (${err.message})`);
+      failures.push(`Bundle fetch error: ${err.message}`);
+    }
+  } else if (entryHtml !== null) {
+    // Entry HTML loaded but contained no <script src> — the page has no
+    // executable bundle, which is itself a broken preview.
+    console.log(`\n  bundle … FAIL (no <script src> found in entry HTML)`);
+    failures.push(
+      'Entry HTML contains no bundle <script src> — application bundle is missing',
+    );
+  }
+
+  return failures;
+}
+
+function printSmokeCheckResult(failures) {
+  // ── Result ──────────────────────────────────────────────────────────────────
+  console.log('');
+  if (failures.length === 0) {
+    console.log('✓ Smoke check passed');
+    return;
+  }
+
+  console.error('✗ Smoke check failed:');
+  for (const failure of failures) {
+    console.error(`  • ${failure}`);
+  }
+}
+
 async function main() {
   console.log('Starting mobile web smoke check…');
 
@@ -119,7 +204,6 @@ async function main() {
   console.log(`Metro port: ${port}`);
 
   let metro = null;
-  const failures = [];
 
   try {
     metro = spawn(
@@ -142,85 +226,32 @@ async function main() {
     await waitForMetro(port);
     console.log('Metro ready\n');
 
-    // ── 1. Check each tab route ─────────────────────────────────────────────
-    let entryHtml = null;
-
-    for (const route of ROUTES) {
-      const url = `${baseUrl}${route}`;
-      process.stdout.write(`  GET ${route} … `);
-      try {
-        const { status, ok, body } = await fetchText(url);
-        if (!ok) {
-          console.log(`FAIL (HTTP ${status})`);
-          failures.push(`Route ${route} returned HTTP ${status}`);
-        } else {
-          console.log(`OK (${status})`);
-          if (route === '/') entryHtml = body;
-        }
-      } catch (err) {
-        console.log(`FAIL (${err.message})`);
-        failures.push(`Route ${route} fetch error: ${err.message}`);
-      }
-    }
-
-    // ── 2. Check the JS bundle ──────────────────────────────────────────────
-    const bundleUrl = entryHtml ? extractBundleUrl(entryHtml, baseUrl) : null;
-
-    if (bundleUrl) {
-      process.stdout.write(`\n  GET bundle … `);
-      try {
-        const { status, ok, body } = await fetchText(bundleUrl, 120_000);
-        if (!ok) {
-          console.log(`FAIL (HTTP ${status})`);
-          failures.push(`Bundle returned HTTP ${status}`);
-        } else if (isBundleErrorEnvelope(body)) {
-          // Metro returns {"type":"error",...} when it cannot compile the bundle.
-          console.log(`FAIL (Metro error envelope in bundle response)`);
-          let detail = '';
-          try {
-            detail = JSON.parse(body.trimStart())?.errors?.[0]?.description || '';
-          } catch {
-            /* ignore parse failures */
-          }
-          failures.push(
-            `Bundle is a Metro error envelope${detail ? ': ' + detail : ''}`,
-          );
-        } else {
-          console.log(`OK (${status}, ${(body.length / 1024).toFixed(0)} KB)`);
-        }
-      } catch (err) {
-        console.log(`FAIL (${err.message})`);
-        failures.push(`Bundle fetch error: ${err.message}`);
-      }
-    } else if (entryHtml !== null) {
-      // Entry HTML loaded but contained no <script src> — the page has no
-      // executable bundle, which is itself a broken preview.
-      console.log(`\n  bundle … FAIL (no <script src> found in entry HTML)`);
-      failures.push(
-        'Entry HTML contains no bundle <script src> — application bundle is missing',
-      );
+    const failures = await checkWebRoutes(port, baseUrl);
+    printSmokeCheckResult(failures);
+    if (failures.length > 0) {
+      process.exitCode = 1;
     }
   } finally {
     if (metro) {
       metro.kill();
     }
   }
-
-  // ── Result ──────────────────────────────────────────────────────────────────
-  console.log('');
-  if (failures.length === 0) {
-    console.log('✓ Smoke check passed');
-    process.exit(0);
-  } else {
-    console.error('✗ Smoke check failed:');
-    for (const f of failures) {
-      console.error(`  • ${f}`);
-    }
-    process.exit(1);
-  }
 }
 
-main().catch((err) => {
-  console.error(`Smoke check error: ${err.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(`Smoke check error: ${err.message}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  ROUTES,
+  checkWebRoutes,
+  extractBundleUrl,
+  findFreePort,
+  getMetroNodeOptions,
+  isBundleErrorEnvelope,
+  printSmokeCheckResult,
+  waitForMetro,
+};

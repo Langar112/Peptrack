@@ -4,6 +4,10 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
+const {
+  checkWebRoutes,
+  printSmokeCheckResult,
+} = require('./smoke-check');
 
 let metroProcess = null;
 // Resolved to a free port in main() before Metro starts.
@@ -187,7 +191,17 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
 
   metroProcess = spawn(
     'pnpm',
-    ['exec', 'expo', 'start', '--no-dev', '--minify', '--localhost', '--port', String(METRO_PORT)],
+    [
+      'exec',
+      'expo',
+      'start',
+      '--web',
+      '--no-dev',
+      '--minify',
+      '--localhost',
+      '--port',
+      String(METRO_PORT),
+    ],
     {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
@@ -558,27 +572,15 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
   console.log('Manifests updated');
 }
 
-function runSmokeCheck() {
-  console.log('Running web smoke check before build...');
-  const smokeCheckPath = path.join(__dirname, 'smoke-check.js');
-  const result = spawnSync(process.execPath, [smokeCheckPath], {
-    stdio: 'inherit',
-    cwd: projectRoot,
-    env: process.env,
-  });
+async function runSmokeCheck() {
+  console.log('Running web smoke check against build Metro...');
+  const failures = await checkWebRoutes(METRO_PORT);
+  printSmokeCheckResult(failures);
 
-  if (result.error) {
-    console.error(`\nSmoke check could not be started: ${result.error.message}`);
-    console.error('Aborting build.');
-    process.exit(1);
-  }
-
-  if (result.status !== 0) {
-    console.error('\nSmoke check failed — build aborted.');
-    console.error(
-      'Fix the issues reported above, then re-run the build.',
+  if (failures.length > 0) {
+    throw new Error(
+      'Smoke check failed — fix the issues reported above, then re-run the build.',
     );
-    process.exit(result.status ?? 1);
   }
 
   console.log('Smoke check passed — proceeding with build.\n');
@@ -629,7 +631,6 @@ async function main() {
 
   setupSignalHandlers();
   runExpoSdkCheck();
-  runSmokeCheck();
 
   const domain = getDeploymentDomain();
   const expoPublicReplId = getExpoPublicReplId();
@@ -643,6 +644,7 @@ async function main() {
   console.log(`Using Metro port: ${METRO_PORT}`);
 
   await startMetro(domain, expoPublicReplId);
+  await runSmokeCheck();
 
   const downloadTimeout = 600000;
   const downloadPromise = downloadBundlesAndManifests(timestamp);
