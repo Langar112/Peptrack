@@ -17,7 +17,11 @@ import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { useColors } from '@/hooks/useColors';
-import { requestNotificationPermissions } from '@/services/notifications';
+import {
+  addNotificationResponseReceivedListener,
+  requestNotificationPermissions,
+  routeNotificationResponse,
+} from '@/services/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -91,6 +95,7 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const router = useRouter();
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -108,6 +113,31 @@ export default function RootLayout() {
     // Request notification permission once on startup (no-op on web)
     requestNotificationPermissions();
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    let subscription: Awaited<
+      ReturnType<typeof addNotificationResponseReceivedListener>
+    > = null;
+
+    const registerResponseListener = async () => {
+      subscription = await addNotificationResponseReceivedListener((response) => {
+        if (!isMounted) return;
+        routeNotificationResponse(response, (route) => router.push(route));
+      });
+
+      // The lazy native module may resolve after this layout unmounts.
+      // Remove the subscription immediately in that case.
+      if (!isMounted) subscription?.remove();
+    };
+
+    void registerResponseListener();
+
+    return () => {
+      isMounted = false;
+      subscription?.remove();
+    };
+  }, [router]);
 
   if (!fontsLoaded && !fontError) return null;
 

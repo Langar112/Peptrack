@@ -13,6 +13,12 @@ import Constants from 'expo-constants';
 type NotificationsModule = typeof import('expo-notifications');
 let notificationsModule: NotificationsModule | null | undefined;
 
+type NotificationResponseListener = Parameters<
+  NotificationsModule['addNotificationResponseReceivedListener']
+>[0];
+export type NotificationResponse = Parameters<NotificationResponseListener>[0];
+export type CycleRoute = `/cycle/${string}`;
+
 /**
  * Expo Go on Android removed remote push notification support in SDK 53.
  * The module logs an ERROR at load time in that environment, so skip the
@@ -83,6 +89,45 @@ export async function requestNotificationPermissions(): Promise<boolean> {
   if (hasNotificationPermission(Notifications, existing)) return true;
   const requested = await Notifications.requestPermissionsAsync();
   return hasNotificationPermission(Notifications, requested);
+}
+
+/**
+ * Subscribe to notification taps without eagerly importing expo-notifications.
+ * Returns null in environments where notifications are unavailable (web and
+ * Android Expo Go), so callers can always treat this as a best-effort feature.
+ */
+export async function addNotificationResponseReceivedListener(
+  listener: NotificationResponseListener,
+): Promise<ReturnType<NotificationsModule['addNotificationResponseReceivedListener']> | null> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return null;
+  return Notifications.addNotificationResponseReceivedListener(listener);
+}
+
+/**
+ * Convert a notification response into the matching cycle route.
+ * Non-cycle notifications are intentionally ignored.
+ */
+export function getCycleRouteFromNotificationResponse(
+  response: NotificationResponse,
+): CycleRoute | null {
+  const cycleId = response.notification.request.content.data?.cycleId;
+  return typeof cycleId === 'string' && cycleId.length > 0
+    ? `/cycle/${cycleId}`
+    : null;
+}
+
+/**
+ * Route a notification response when it contains a cycle ID.
+ * Kept separate from the router so the notification behavior can be tested
+ * without mounting the full Expo Router layout.
+ */
+export function routeNotificationResponse(
+  response: NotificationResponse,
+  navigate: (route: CycleRoute) => void,
+): void {
+  const route = getCycleRouteFromNotificationResponse(response);
+  if (route) navigate(route);
 }
 
 // ─── AsyncStorage map: cycleId → scheduled notification IDs ──────────────────

@@ -26,6 +26,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockScheduleNotificationAsync = vi.fn().mockResolvedValue('notif-id-1');
 const mockCancelScheduledNotificationAsync = vi.fn().mockResolvedValue(undefined);
 const mockSetNotificationHandler = vi.fn();
+const mockAddNotificationResponseReceivedListener = vi.fn().mockReturnValue({
+  remove: vi.fn(),
+});
 const mockGetPermissionsAsync = vi.fn();
 const mockRequestPermissionsAsync = vi.fn();
 
@@ -53,6 +56,8 @@ async function importNotifications(opts: {
 
   vi.doMock('expo-notifications', () => ({
     setNotificationHandler: mockSetNotificationHandler,
+    addNotificationResponseReceivedListener:
+      mockAddNotificationResponseReceivedListener,
     scheduleNotificationAsync: mockScheduleNotificationAsync,
     cancelScheduledNotificationAsync: mockCancelScheduledNotificationAsync,
     getPermissionsAsync: mockGetPermissionsAsync,
@@ -309,7 +314,70 @@ describe('requestNotificationPermissions on Android EAS build', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 6. Cancellation on Android EAS builds
+// 6. Notification tap routing
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('notification response routing', () => {
+  it('registers a listener and routes a dose reminder to its cycle', async () => {
+    const {
+      addNotificationResponseReceivedListener,
+      routeNotificationResponse,
+    } = await importNotifications({
+      platformOS: 'android',
+      executionEnvironment: 'bare',
+    });
+
+    const navigate = vi.fn();
+    const listener = (response: Parameters<typeof routeNotificationResponse>[0]) =>
+      routeNotificationResponse(response, navigate);
+
+    await addNotificationResponseReceivedListener(listener);
+
+    expect(mockAddNotificationResponseReceivedListener).toHaveBeenCalledOnce();
+
+    const [registeredListener] =
+      mockAddNotificationResponseReceivedListener.mock.calls[0] as [
+        (response: Parameters<typeof routeNotificationResponse>[0]) => void,
+      ];
+    registeredListener({
+      notification: {
+        request: {
+          content: {
+            data: { cycleId: 'cycle-42' },
+          },
+        },
+      },
+    } as unknown as Parameters<typeof routeNotificationResponse>[0]);
+
+    expect(navigate).toHaveBeenCalledWith('/cycle/cycle-42');
+  });
+
+  it('ignores responses without a cycle ID', async () => {
+    const { routeNotificationResponse } = await importNotifications({
+      platformOS: 'android',
+      executionEnvironment: 'bare',
+    });
+
+    const navigate = vi.fn();
+    routeNotificationResponse(
+      {
+        notification: {
+          request: {
+            content: {
+              data: {},
+            },
+          },
+        },
+      } as unknown as Parameters<typeof routeNotificationResponse>[0],
+      navigate,
+    );
+
+    expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 7. Cancellation on Android EAS builds
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('cancelCycleNotifications on Android EAS build', () => {
