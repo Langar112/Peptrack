@@ -34,6 +34,7 @@ const mockRequestPermissionsAsync = vi.fn();
 
 const mockAsyncStorageGetItem = vi.fn().mockResolvedValue(null);
 const mockAsyncStorageSetItem = vi.fn().mockResolvedValue(undefined);
+let notificationImportFailures = 0;
 
 // ── Module factory helper ─────────────────────────────────────────────────────
 
@@ -45,7 +46,10 @@ const mockAsyncStorageSetItem = vi.fn().mockResolvedValue(undefined);
 async function importNotifications(opts: {
   platformOS: 'android' | 'ios' | 'web';
   executionEnvironment: 'bare' | 'storeClient' | 'standalone';
+  notificationImportFailures?: number;
 }) {
+  notificationImportFailures = opts.notificationImportFailures ?? 0;
+
   vi.doMock('react-native', () => ({
     Platform: { OS: opts.platformOS },
   }));
@@ -54,18 +58,25 @@ async function importNotifications(opts: {
     default: { executionEnvironment: opts.executionEnvironment },
   }));
 
-  vi.doMock('expo-notifications', () => ({
-    setNotificationHandler: mockSetNotificationHandler,
-    addNotificationResponseReceivedListener:
-      mockAddNotificationResponseReceivedListener,
-    scheduleNotificationAsync: mockScheduleNotificationAsync,
-    cancelScheduledNotificationAsync: mockCancelScheduledNotificationAsync,
-    getPermissionsAsync: mockGetPermissionsAsync,
-    requestPermissionsAsync: mockRequestPermissionsAsync,
-    // Trigger type enum used by scheduleCycleNotifications
-    SchedulableTriggerInputTypes: { DATE: 'date' },
-    IosAuthorizationStatus: { AUTHORIZED: 3, PROVISIONAL: 2 },
-  }));
+  vi.doMock('expo-notifications', () => {
+    if (notificationImportFailures > 0) {
+      notificationImportFailures -= 1;
+      throw new Error('transient notification module load failure');
+    }
+
+    return {
+      setNotificationHandler: mockSetNotificationHandler,
+      addNotificationResponseReceivedListener:
+        mockAddNotificationResponseReceivedListener,
+      scheduleNotificationAsync: mockScheduleNotificationAsync,
+      cancelScheduledNotificationAsync: mockCancelScheduledNotificationAsync,
+      getPermissionsAsync: mockGetPermissionsAsync,
+      requestPermissionsAsync: mockRequestPermissionsAsync,
+      // Trigger type enum used by scheduleCycleNotifications
+      SchedulableTriggerInputTypes: { DATE: 'date' },
+      IosAuthorizationStatus: { AUTHORIZED: 3, PROVISIONAL: 2 },
+    };
+  });
 
   vi.doMock('@react-native-async-storage/async-storage', () => ({
     default: {
@@ -86,6 +97,7 @@ beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
   mockAsyncStorageGetItem.mockResolvedValue(null);
+  notificationImportFailures = 0;
 });
 
 afterEach(() => {
@@ -195,6 +207,26 @@ describe('Android EAS build (executionEnvironment = "bare")', () => {
     mockGetPermissionsAsync.mockResolvedValue({ android: { importance: 4 } });
     await requestNotificationPermissions();
 
+    expect(mockSetNotificationHandler).toHaveBeenCalledOnce();
+  });
+
+  it('retries a notification module import after a transient failure', async () => {
+    const { requestNotificationPermissions } = await importNotifications({
+      platformOS: 'android',
+      executionEnvironment: 'bare',
+      notificationImportFailures: 1,
+    });
+
+    mockGetPermissionsAsync.mockResolvedValue({ android: { importance: 4 } });
+
+    // The first call sees the transient import error and remains best effort.
+    await expect(requestNotificationPermissions()).resolves.toBe(false);
+    expect(mockGetPermissionsAsync).not.toHaveBeenCalled();
+
+    // A later notification call retries instead of treating the module as
+    // permanently unavailable.
+    await expect(requestNotificationPermissions()).resolves.toBe(true);
+    expect(mockGetPermissionsAsync).toHaveBeenCalledOnce();
     expect(mockSetNotificationHandler).toHaveBeenCalledOnce();
   });
 });

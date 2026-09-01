@@ -12,6 +12,10 @@ import Constants from 'expo-constants';
 
 type NotificationsModule = typeof import('expo-notifications');
 let notificationsModule: NotificationsModule | null | undefined;
+let notificationsLoadFailure:
+  | { attempts: number; retryAt: number }
+  | undefined;
+const NOTIFICATIONS_RETRY_DELAY_MS = 1_000;
 
 type NotificationResponseListener = Parameters<
   NotificationsModule['addNotificationResponseReceivedListener']
@@ -28,6 +32,12 @@ export type CycleRoute = `/cycle/${string}`;
 async function getNotifications(): Promise<NotificationsModule | null> {
   if (Platform.OS === 'web') return null;
   if (notificationsModule !== undefined) return notificationsModule;
+  if (
+    notificationsLoadFailure &&
+    Date.now() < notificationsLoadFailure.retryAt
+  ) {
+    return null;
+  }
 
   // Guard: expo-notifications triggers DevicePushTokenAutoRegistration on load,
   // which throws on Android Expo Go. Bail out before the import to keep the
@@ -39,6 +49,7 @@ async function getNotifications(): Promise<NotificationsModule | null> {
   const isExpoGo = Constants.executionEnvironment === 'storeClient';
   if (isExpoGo && Platform.OS === 'android') {
     notificationsModule = null;
+    notificationsLoadFailure = undefined;
     return null;
   }
 
@@ -53,11 +64,19 @@ async function getNotifications(): Promise<NotificationsModule | null> {
       }),
     });
     notificationsModule = Notifications;
+    notificationsLoadFailure = undefined;
   } catch {
-    notificationsModule = null;
+    const attempts = (notificationsLoadFailure?.attempts ?? 0) + 1;
+    notificationsLoadFailure = {
+      attempts,
+      // Let the next call retry immediately after the first failure. If the
+      // module keeps failing, use a short cooldown rather than retrying in a
+      // tight loop on every notification-related call.
+      retryAt: Date.now() + (attempts > 1 ? NOTIFICATIONS_RETRY_DELAY_MS : 0),
+    };
   }
 
-  return notificationsModule;
+  return notificationsModule ?? null;
 }
 
 const NOTIF_MAP_KEY = '@peptidetracker/notif_ids';
