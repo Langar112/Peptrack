@@ -4,3 +4,4 @@
 - [Cycle audit integrity](cycle-audit-integrity.md) — Cycle edits preserve pre-effective scheduled events and keep generated update records immutable.
 - [Expo notification permission types](expo-notification-permission-types.md) — Newer notifications packages may lose inherited permission fields against the workspace Expo SDK.
 - [Private device sessions](private-device-sessions.md) — PepTrack uses opaque anonymous sessions per installation; account recovery is intentionally unavailable.
+- [Stale API workflow processes](stale-api-workflow-processes.md) — Restart an artifact API workflow when its port is held by an older process before diagnosing missing response fields.
