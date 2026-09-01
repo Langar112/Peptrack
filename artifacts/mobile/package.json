@@ -12,6 +12,7 @@
     "smoke": "node scripts/smoke-check.js",
     "serve": "node server/serve.js",
     "test": "vitest run",
+    "pretypecheck": "pnpm --workspace-root run typecheck:libs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
